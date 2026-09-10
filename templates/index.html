@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDA Applications &mdash; Group 6 &middot; Theory of Computation</title>
+  <meta name="description" content="Interactive step-by-step simulation of Pushdown Automaton applications: arithmetic evaluation, Tower of Hanoi, HTML tag parsing, and NLP parsing." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header id="site-header">
+    <div class="header-inner">
+      <div class="header-meta">
+        <span class="badge">Theory of Computation</span>
+        <span class="badge">Group 6 &middot; Comp C &middot; Roll 61&ndash;69</span>
+      </div>
+      <h1 id="main-title">Applications of PDA</h1>
+      <p class="subtitle">Pushdown Automaton &mdash; Interactive Step-by-Step Simulation</p>
+    </div>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav id="tab-nav" role="tablist" aria-label="PDA Topics">
+    <button class="tab-btn active" role="tab" aria-selected="true"  data-topic="arithmetic" id="tab-arithmetic">
+      <span class="tab-label">A</span>
+      <span class="tab-title">Arithmetic<br><small>Expression Eval</small></span>
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-topic="hanoi" id="tab-hanoi">
+      <span class="tab-label">B</span>
+      <span class="tab-title">Tower of<br><small>Hanoi</small></span>
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-topic="html" id="tab-html">
+      <span class="tab-label">C</span>
+      <span class="tab-title">HTML/XML<br><small>Tag Validation</small></span>
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-topic="nlp" id="tab-nlp">
+      <span class="tab-label">D</span>
+      <span class="tab-title">NLP<br><small>Syntax Parse</small></span>
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <main id="main-content">
+
+    <!-- ====================================================
+         TOPIC A -- ARITHMETIC
+    ==================================================== -->
+    <section class="topic-panel active" id="panel-arithmetic" role="tabpanel" aria-labelledby="tab-arithmetic">
+      <div class="panel-desc">
+        <h2>Postfix Arithmetic Expression Evaluation</h2>
+        <p>Enter a <strong>postfix (RPN)</strong> expression with space-separated tokens. Numbers are pushed onto the stack; operators pop two operands, compute, and push the result. The <code>$</code> end-marker is optional.</p>
+        <p class="example-hint">Example: <code>4 5 3 * +</code> &rarr; evaluates <em>4 + (5&times;3) = 19</em></p>
+      </div>
+      <div class="input-row">
+        <div class="input-group">
+          <label for="arith-input">Postfix expression</label>
+          <input type="text" id="arith-input" placeholder="e.g. 4 5 3 * +" value="4 5 3 * +" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="btn-group-run">
+          <button class="run-btn" id="arithmetic-run">Run Simulation</button>
+          <button class="reset-btn" id="reset-arithmetic">Reset</button>
+        </div>
+      </div>
+      <div class="sim-area" id="sim-arithmetic" style="display:none;">
+        <div class="state-diagram-wrap">
+          <div class="state-diagram" id="states-arithmetic"></div>
+        </div>
+        <div class="sim-body">
+          <div class="stack-panel">
+            <div class="panel-label">Stack <span class="hint">(top &darr; bottom)</span></div>
+            <div class="stack-cells" id="stack-arithmetic"></div>
+            <div class="stack-floor">Z&#x2080;</div>
+          </div>
+          <div class="step-panel">
+            <div class="step-info" id="stepinfo-arithmetic">
+              <div class="step-counter" id="stepctr-arithmetic"></div>
+              <div class="step-action" id="stepaction-arithmetic"></div>
+              <div class="step-arrow" id="steparrow-arithmetic"></div>
+              <div class="step-input-rem">
+                <span class="dim-label">Remaining input:</span>
+                <code id="steprem-arithmetic"></code>
+              </div>
+            </div>
+            <div class="controls" id="ctrl-arithmetic">
+              <button class="ctrl-btn" id="first-arithmetic" title="Go to first step">&laquo;</button>
+              <button class="ctrl-btn" id="prev-arithmetic" title="Previous step">&lsaquo; Prev</button>
+              <button class="ctrl-btn play-btn" id="play-arithmetic">Play</button>
+              <button class="ctrl-btn" id="next-arithmetic" title="Next step">Next &rsaquo;</button>
+              <button class="ctrl-btn" id="last-arithmetic" title="Go to last step">&raquo;</button>
+            </div>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <div class="panel-label">Transition Log</div>
+          <div class="log-table-wrap">
+            <table class="log-table" id="log-arithmetic">
+              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="error-box" id="err-arithmetic" style="display:none;"></div>
+    </section>
+
+    <!-- ====================================================
+         TOPIC B -- HANOI
+    ==================================================== -->
+    <section class="topic-panel" id="panel-hanoi" role="tabpanel" aria-labelledby="tab-hanoi">
+      <div class="panel-desc">
+        <h2>Tower of Hanoi &mdash; PDA Simulation</h2>
+        <p>The PDA uses its stack as a call stack of recursive frames <code>R(n,S,D,A)</code> and atomic move markers <code>M(n,S,D)</code>. Each step either expands a frame into three sub-frames or emits a concrete disk move.</p>
+        <p class="example-hint">Try <strong>n = 3</strong>, pegs <strong>A &rarr; C</strong> via <strong>B</strong>.</p>
+      </div>
+      <div class="input-row hanoi-inputs">
+        <div class="input-group small">
+          <label for="hanoi-n">Disks (n)</label>
+          <input type="number" id="hanoi-n" min="1" max="7" value="3" />
+        </div>
+        <div class="input-group small">
+          <label for="hanoi-src">Source</label>
+          <select id="hanoi-src">
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </select>
+        </div>
+        <div class="input-group small">
+          <label for="hanoi-dest">Destination</label>
+          <select id="hanoi-dest">
+            <option value="C">C</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+          </select>
+        </div>
+        <div class="input-group small">
+          <label for="hanoi-aux">Auxiliary</label>
+          <select id="hanoi-aux">
+            <option value="B">B</option>
+            <option value="A">A</option>
+            <option value="C">C</option>
+          </select>
+        </div>
+        <div class="btn-group-run">
+          <button class="run-btn" id="hanoi-run">Run Simulation</button>
+          <button class="reset-btn" id="reset-hanoi">Reset</button>
+        </div>
+      </div>
+      <div class="sim-area" id="sim-hanoi" style="display:none;">
+        <div class="state-diagram-wrap">
+          <div class="state-diagram" id="states-hanoi"></div>
+        </div>
+        <div class="sim-body">
+          <div class="stack-panel">
+            <div class="panel-label">Stack <span class="hint">(top &darr; bottom)</span></div>
+            <div class="stack-cells" id="stack-hanoi"></div>
+            <div class="stack-floor">Z&#x2080;</div>
+          </div>
+          <div class="step-panel">
+            <div class="step-info" id="stepinfo-hanoi">
+              <div class="step-counter" id="stepctr-hanoi"></div>
+              <div class="step-action" id="stepaction-hanoi"></div>
+              <div class="step-arrow" id="steparrow-hanoi"></div>
+              <div class="moves-emitted">
+                <span class="dim-label">Moves emitted so far:</span>
+                <ol id="moves-list-hanoi"></ol>
+              </div>
+            </div>
+            <div class="controls" id="ctrl-hanoi">
+              <button class="ctrl-btn" id="first-hanoi" title="First step">&laquo;</button>
+              <button class="ctrl-btn" id="prev-hanoi" title="Previous step">&lsaquo; Prev</button>
+              <button class="ctrl-btn play-btn" id="play-hanoi">Play</button>
+              <button class="ctrl-btn" id="next-hanoi" title="Next step">Next &rsaquo;</button>
+              <button class="ctrl-btn" id="last-hanoi" title="Last step">&raquo;</button>
+            </div>
+          </div>
+          <!-- Peg Visualization -->
+          <div class="viz-panel" id="hanoi-viz-panel">
+            <div class="panel-label">Peg Visualization</div>
+            <div class="hanoi-stage" id="hanoi-stage"></div>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <div class="panel-label">Transition Log</div>
+          <div class="log-table-wrap">
+            <table class="log-table" id="log-hanoi">
+              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="error-box" id="err-hanoi" style="display:none;"></div>
+    </section>
+
+    <!-- ====================================================
+         TOPIC C -- HTML VALIDATION
+    ==================================================== -->
+    <section class="topic-panel" id="panel-html" role="tabpanel" aria-labelledby="tab-html">
+      <div class="panel-desc">
+        <h2>HTML / XML Tag Nesting Validation</h2>
+        <p>Opening tags are pushed onto the stack; closing tags must match the top and pop it. If the stack is empty at the end, the document is well-formed.</p>
+        <p class="example-hint">Example: <code>&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;</code></p>
+      </div>
+      <div class="input-row">
+        <div class="input-group full">
+          <label for="html-input">HTML / XML snippet</label>
+          <textarea id="html-input" rows="3" spellcheck="false">&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;</textarea>
+        </div>
+        <div class="btn-group-run">
+          <button class="run-btn" id="html-run">Run Simulation</button>
+          <button class="reset-btn" id="reset-html">Reset</button>
+        </div>
+      </div>
+      <div class="sim-area" id="sim-html" style="display:none;">
+        <div class="state-diagram-wrap">
+          <div class="state-diagram" id="states-html"></div>
+        </div>
+        <div class="sim-body">
+          <div class="stack-panel">
+            <div class="panel-label">Stack <span class="hint">(top &darr; bottom)</span></div>
+            <div class="stack-cells" id="stack-html"></div>
+            <div class="stack-floor">Z&#x2080;</div>
+          </div>
+          <div class="step-panel">
+            <div class="step-info" id="stepinfo-html">
+              <div class="step-counter" id="stepctr-html"></div>
+              <div class="step-action" id="stepaction-html"></div>
+              <div class="step-arrow" id="steparrow-html"></div>
+              <div class="step-input-rem">
+                <span class="dim-label">Remaining input:</span>
+                <code id="steprem-html"></code>
+              </div>
+            </div>
+            <div class="controls" id="ctrl-html">
+              <button class="ctrl-btn" id="first-html" title="First step">&laquo;</button>
+              <button class="ctrl-btn" id="prev-html" title="Previous step">&lsaquo; Prev</button>
+              <button class="ctrl-btn play-btn" id="play-html">Play</button>
+              <button class="ctrl-btn" id="next-html" title="Next step">Next &rsaquo;</button>
+              <button class="ctrl-btn" id="last-html" title="Last step">&raquo;</button>
+            </div>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <div class="panel-label">Transition Log</div>
+          <div class="log-table-wrap">
+            <table class="log-table" id="log-html">
+              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="error-box" id="err-html" style="display:none;"></div>
+    </section>
+
+    <!-- ====================================================
+         TOPIC D -- NLP
+    ==================================================== -->
+    <section class="topic-panel" id="panel-nlp" role="tabpanel" aria-labelledby="tab-nlp">
+      <div class="panel-desc">
+        <h2>NLP &mdash; Shift-Reduce Syntax Parse</h2>
+        <p>Words are shifted (pushed) onto the stack. When the top symbols match a grammar rule, they are reduced (popped and replaced by the non-terminal). Accepts when the stack reduces to a single <code>S</code>.</p>
+        <p class="example-hint">Supported: <code>the, a, an, dog, cat, bird, fish, man, woman, child, boy, girl, tree, car, book, ball, chased, ate, saw, hit, liked, found, heard, loves, runs, catches, caught, big, small, red, old, young, quickly, slowly</code></p>
+      </div>
+      <div class="input-row">
+        <div class="input-group">
+          <label for="nlp-input">Sentence</label>
+          <input type="text" id="nlp-input" placeholder="e.g. the dog chased the cat" value="the dog chased the cat" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="btn-group-run">
+          <button class="run-btn" id="nlp-run">Run Simulation</button>
+          <button class="reset-btn" id="reset-nlp">Reset</button>
+        </div>
+      </div>
+      <div class="sim-area" id="sim-nlp" style="display:none;">
+        <div class="state-diagram-wrap">
+          <div class="state-diagram" id="states-nlp"></div>
+        </div>
+        <div class="sim-body">
+          <div class="stack-panel">
+            <div class="panel-label">Stack <span class="hint">(top &darr; bottom)</span></div>
+            <div class="stack-cells" id="stack-nlp"></div>
+            <div class="stack-floor">Z&#x2080;</div>
+          </div>
+          <div class="step-panel">
+            <div class="step-info" id="stepinfo-nlp">
+              <div class="step-counter" id="stepctr-nlp"></div>
+              <div class="step-action" id="stepaction-nlp"></div>
+              <div class="step-arrow" id="steparrow-nlp"></div>
+              <div class="step-input-rem">
+                <span class="dim-label">Remaining input:</span>
+                <code id="steprem-nlp"></code>
+              </div>
+            </div>
+            <div class="controls" id="ctrl-nlp">
+              <button class="ctrl-btn" id="first-nlp" title="First step">&laquo;</button>
+              <button class="ctrl-btn" id="prev-nlp" title="Previous step">&lsaquo; Prev</button>
+              <button class="ctrl-btn play-btn" id="play-nlp">Play</button>
+              <button class="ctrl-btn" id="next-nlp" title="Next step">Next &rsaquo;</button>
+              <button class="ctrl-btn" id="last-nlp" title="Last step">&raquo;</button>
+            </div>
+          </div>
+          <!-- Syntax Tree -->
+          <div class="viz-panel tree-viz-panel" id="nlp-tree-panel">
+            <div class="panel-label">Syntax Tree <span class="hint">(builds as parse progresses)</span></div>
+            <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <div class="panel-label">Transition Log</div>
+          <div class="log-table-wrap">
+            <table class="log-table" id="log-nlp">
+              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="error-box" id="err-nlp" style="display:none;"></div>
+    </section>
+
+  </main>
+
+  <footer id="site-footer">
+    <span>Group 6 &middot; Roll 61&ndash;69 &middot; Comp C &nbsp;&middot;&nbsp; Theory of Computation &nbsp;&middot;&nbsp; PDA Applications</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
