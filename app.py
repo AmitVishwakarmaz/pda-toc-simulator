@@ -481,12 +481,12 @@ def run_nlp(sentence: str):
         tree_stack.append(make_node(word))
         snap(remaining, "SHIFT '{}' -- PUSH '{}'".format(word, word), "q1 -> q1 (shift)")
 
-        # Lexical reduce: word -> POS tag (immediately)
+        # Reduce: word -> POS tag (immediately)
         stack.pop()
         word_node = tree_stack.pop()
         stack.append(pos)
         tree_stack.append(make_node(pos, [word_node]))
-        snap(remaining, "REDUCE: '{}' -> {}  (lexical lookup)".format(word, pos), "q1 -> q1 (reduce)")
+        snap(remaining, "REDUCE: '{}' -> {}".format(word, pos), "q1 -> q1 (reduce)")
 
     return steps
 
