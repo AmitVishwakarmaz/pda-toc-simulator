@@ -83,31 +83,72 @@ Models recursive function calls using an explicit PDA stack. Frames represent ei
 
 ---
 
-# Topic C: HTML / XML Balanced Tag Validation
+# Topic C: HTML & XML Balanced Tag Validation
 
-Validates whether open and close markup tags form properly nested language structures (a classic Context-Free Language $L = \{w \mid \text{tags in } w \text{ are properly nested}\}$).
+Validates whether open and close markup tags form properly nested language structures. HTML allows void tags (e.g. `<br>`) and implicit auto-closing tags (e.g. `<p>`), while XML enforces strict balanced closing without void or auto-close exceptions.
 
-### 1. Formal 7-Tuple Specification
-- **$Q$** = $\{q_0, q_f, q_{\text{err}}\}$
-- **$\Sigma$** = $\{\langle t \rangle, \langle /t \rangle, \text{text}, \$\} \quad (\forall t \in \text{Tag Names})$
-- **$\Gamma$** = $\{t \mid t \in \text{Tag Names}\} \cup \{Z_0\}$
-- **$q_0$** = $q_0$ (Processing State)
-- **$Z_0$** = $Z_0$ (Bottom Marker)
-- **$F$** = $\{q_f\}$ (Accepting State)
+---
 
-### 2. State Transition Table
+### Step 3: State Transition Table
+
+#### For HTML
 
 | Current State ($q$) | Input Symbol ($a$) | Stack Top ($X$) | Next State ($p$) | Stack Action ($\gamma$) | Formal Transition $\delta(q, a, X)$ | Meaning / Operation |
 | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **$q_0$** | Opening Tag $\langle t \rangle$ | $X$ | $q_0$ | $t \cdot X$ | $(q_0, tX)$ | **Push opening tag** $t$ onto stack |
-| **$q_0$** | Text chunk | $X$ | $q_0$ | $X$ | $(q_0, X)$ | Text inside tag: **stack unchanged** |
-| **$q_0$** | Closing Tag $\langle /t \rangle$ | $t$ | $q_0$ | $\varepsilon$ | $(q_0, \varepsilon)$ | **Matching Tag: POP** $t$ from stack |
-| **$q_0$** | Closing Tag $\langle /t \rangle$ | $t'\ (t' \neq t)$ | $q_{\text{err}}$ | $t'X$ | $(q_{\text{err}}, t'X)$ | **Tag Mismatch Error** (e.g., `<div>...</span>`) |
-| **$q_0$** | Closing Tag $\langle /t \rangle$ | $Z_0$ | $q_{\text{err}}$ | $Z_0$ | $(q_{\text{err}}, Z_0)$ | **Extra Closing Tag** when stack has no open tag |
-| **$q_0$** | $\$$ (End of Input) | $Z_0$ | $q_f$ | $Z_0$ | $(q_f, Z_0)$ | **Accept**: All tags matched and closed |
-| **$q_0$** | $\$$ (End of Input) | $t \neq Z_0$ | $q_{\text{err}}$ | $tX$ | $(q_{\text{err}}, tX)$ | **Unclosed Tag Error**: Input ended with tags still open |
+| **$q_0$** | $\langle T \rangle$ | $Z_0$ | $q_0$ | $T\ Z_0$ | $\delta(q_0, \langle T \rangle, Z_0) = (q_0, T\ Z_0)$ | Push tag $T$ onto bottom marker $Z_0$ |
+| **$q_0$** | $\langle T_2 \rangle$ | $T_1$ | $q_0$ | $T_2\ T_1$ | $\delta(q_0, \langle T_2 \rangle, T_1) = (q_0, T_2\ T_1)$ | Push tag $T_2$ onto stack above $T_1$ |
+| **$q_0$** | text | $T$ | $q_0$ | $T$ | $\delta(q_0, \text{text}, T) = (q_0, T)$ | Text inside tag: stack unchanged |
+| **$q_0$** | text | $Z_0$ | $q_0$ | $Z_0$ | $\delta(q_0, \text{text}, Z_0) = (q_0, Z_0)$ | Root text: stack unchanged |
+| **$q_0$** | $\langle /T \rangle$ | $T$ | $q_0$ | $\varepsilon$ | $\delta(q_0, \langle /T \rangle, T) = (q_0, \varepsilon)$ | Matching closing tag: POP $T$ |
+| **$q_0$** | $\langle\text{br}\rangle$ | $T$ | $q_0$ | $T$ | $\delta(q_0, \langle\text{br}\rangle, T) = (q_0, T)$ | HTML void tag inside tag: stack unchanged |
+| **$q_0$** | $\langle\text{br}\rangle$ | $Z_0$ | $q_0$ | $Z_0$ | $\delta(q_0, \langle\text{br}\rangle, Z_0) = (q_0, Z_0)$ | HTML void tag at root: stack unchanged |
+| **$q_0$** | $\varepsilon$ | $\langle\text{p}\rangle$ | $q_0$ | $\varepsilon$ | $\delta(q_0, \varepsilon, \langle\text{p}\rangle) = (q_0, \varepsilon)$ | Auto-close tag $\langle\text{p}\rangle$: implicit POP |
+| **$q_0$** | $\varepsilon$ | $Z_0$ | $q_f$ | $Z_0$ | $\delta(q_0, \varepsilon, Z_0) = (q_f, Z_0)$ | End of input with empty stack: ACCEPT |
+
+#### For XML
+
+| Current State ($q$) | Input Symbol ($a$) | Stack Top ($X$) | Next State ($p$) | Stack Action ($\gamma$) | Formal Transition $\delta(q, a, X)$ | Meaning / Operation |
+| :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **$q_0$** | $\langle T \rangle$ | $Z_0$ | $q_0$ | $T\ Z_0$ | $\delta(q_0, \langle T \rangle, Z_0) = (q_0, T\ Z_0)$ | Push tag $T$ onto bottom marker $Z_0$ |
+| **$q_0$** | $\langle T_2 \rangle$ | $T_1$ | $q_0$ | $T_2\ T_1$ | $\delta(q_0, \langle T_2 \rangle, T_1) = (q_0, T_2\ T_1)$ | Push tag $T_2$ onto stack above $T_1$ |
+| **$q_0$** | text | $T$ | $q_0$ | $T$ | $\delta(q_0, \text{text}, T) = (q_0, T)$ | Text inside tag: stack unchanged |
+| **$q_0$** | text | $Z_0$ | $q_0$ | $Z_0$ | $\delta(q_0, \text{text}, Z_0) = (q_0, Z_0)$ | Root text: stack unchanged |
+| **$q_0$** | $\langle /T \rangle$ | $T$ | $q_0$ | $\varepsilon$ | $\delta(q_0, \langle /T \rangle, T) = (q_0, \varepsilon)$ | Matching closing tag: POP $T$ |
+| **$q_0$** | $\varepsilon$ | $Z_0$ | $q_f$ | $Z_0$ | $\delta(q_0, \varepsilon, Z_0) = (q_f, Z_0)$ | End of input with empty stack: ACCEPT |
 
 ---
+
+### Step 4: State Transition Diagrams
+
+#### For HTML
+```mermaid
+stateDiagram-v2
+    [*] --> q0
+    q0 --> q0 : <T>, Z0 / T Z0
+    q0 --> q0 : <T2>, T1 / T2 T1
+    q0 --> q0 : text, T / T
+    q0 --> q0 : text, Z0 / Z0
+    q0 --> q0 : </T>, T / ε
+    q0 --> q0 : <br>, T / T
+    q0 --> q0 : <br>, Z0 / Z0
+    q0 --> q0 : ε, <p> / ε
+    q0 --> qf : ε, Z0 / Z0
+```
+
+#### For XML
+```mermaid
+stateDiagram-v2
+    [*] --> q0
+    q0 --> q0 : <T>, Z0 / T Z0
+    q0 --> q0 : <T2>, T1 / T2 T1
+    q0 --> q0 : text, T / T
+    q0 --> q0 : text, Z0 / Z0
+    q0 --> q0 : </T>, T / ε
+    q0 --> qf : ε, Z0 / Z0
+```
+
+---
+
 
 # Topic D: Natural Language Processing (Shift-Reduce Parser)
 

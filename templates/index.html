@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PDA Applications &mdash; Group 6 &middot; Theory of Computation</title>
-  <meta name="description" content="Interactive step-by-step simulation of Pushdown Automaton applications: arithmetic evaluation, Tower of Hanoi, HTML tag parsing, and NLP parsing." />
+  <meta name="description"
+    content="Interactive step-by-step simulation of Pushdown Automaton applications: arithmetic evaluation, Tower of Hanoi, HTML tag parsing, and NLP parsing." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
+
 <body>
 
   <!-- Header -->
@@ -26,7 +31,7 @@
 
   <!-- Tab Nav -->
   <nav id="tab-nav" role="tablist" aria-label="PDA Topics">
-    <button class="tab-btn active" role="tab" aria-selected="true"  data-topic="arithmetic" id="tab-arithmetic">
+    <button class="tab-btn active" role="tab" aria-selected="true" data-topic="arithmetic" id="tab-arithmetic">
       <span class="tab-label">A</span>
       <span class="tab-title">Arithmetic<br><small>Expression Eval</small></span>
     </button>
@@ -53,13 +58,16 @@
     <section class="topic-panel active" id="panel-arithmetic" role="tabpanel" aria-labelledby="tab-arithmetic">
       <div class="panel-desc">
         <h2>Postfix Arithmetic Expression Evaluation</h2>
-        <p>Enter a <strong>postfix (RPN)</strong> expression with space-separated tokens. Numbers are pushed onto the stack; operators pop two operands, compute, and push the result. The <code>$</code> end-marker is optional.</p>
+        <p>Enter a <strong>postfix (RPN)</strong> expression with space-separated tokens. Numbers are pushed onto the
+          stack; operators pop two operands, compute, and push the result. The <code>$</code> end-marker is optional.
+        </p>
         <p class="example-hint">Example: <code>4 5 3 * +</code> &rarr; evaluates <em>4 + (5&times;3) = 19</em></p>
       </div>
       <div class="input-row">
         <div class="input-group">
           <label for="arith-input">Postfix expression</label>
-          <input type="text" id="arith-input" placeholder="e.g. 4 5 3 * +" value="4 5 3 * +" autocomplete="off" spellcheck="false" />
+          <input type="text" id="arith-input" placeholder="e.g. 4 5 3 * +" value="4 5 3 * +" autocomplete="off"
+            spellcheck="false" />
         </div>
         <div class="btn-group-run">
           <button class="run-btn" id="arithmetic-run">Run Simulation</button>
@@ -94,12 +102,25 @@
               <button class="ctrl-btn" id="last-arithmetic" title="Go to last step">&raquo;</button>
             </div>
           </div>
+          <!-- Arithmetic Stack Visualization -->
+          <div class="viz-panel arith-viz-panel" id="arith-viz-panel">
+            <div class="panel-label">Stack Visualization <span class="hint">(expression tape)</span></div>
+            <div class="arith-stage" id="arith-stage"></div>
+          </div>
         </div>
         <div class="log-wrap">
           <div class="panel-label">Transition Log</div>
           <div class="log-table-wrap">
             <table class="log-table" id="log-arithmetic">
-              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>State</th>
+                  <th>Action</th>
+                  <th>Stack top</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
               <tbody></tbody>
             </table>
           </div>
@@ -114,7 +135,9 @@
     <section class="topic-panel" id="panel-hanoi" role="tabpanel" aria-labelledby="tab-hanoi">
       <div class="panel-desc">
         <h2>Tower of Hanoi &mdash; PDA Simulation</h2>
-        <p>The PDA uses its stack as a call stack of recursive frames <code>R(n,S,D,A)</code> and atomic move markers <code>M(n,S,D)</code>. Each step either expands a frame into three sub-frames or emits a concrete disk move.</p>
+        <p>The PDA uses its stack as a call stack of recursive frames <code>R(n,S,D,A)</code> and atomic move markers
+          <code>M(n,S,D)</code>. Each step either expands a frame into three sub-frames or emits a concrete disk move.
+        </p>
         <p class="example-hint">Try <strong>n = 3</strong>, pegs <strong>A &rarr; C</strong> via <strong>B</strong>.</p>
       </div>
       <div class="input-row hanoi-inputs">
@@ -189,7 +212,14 @@
           <div class="panel-label">Transition Log</div>
           <div class="log-table-wrap">
             <table class="log-table" id="log-hanoi">
-              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>State</th>
+                  <th>Action</th>
+                  <th>Stack top</th>
+                </tr>
+              </thead>
               <tbody></tbody>
             </table>
           </div>
@@ -199,18 +229,48 @@
     </section>
 
     <!-- ====================================================
-         TOPIC C -- HTML VALIDATION
+         TOPIC C -- HTML / XML VALIDATION
     ==================================================== -->
     <section class="topic-panel" id="panel-html" role="tabpanel" aria-labelledby="tab-html">
       <div class="panel-desc">
-        <h2>HTML / XML Tag Nesting Validation</h2>
-        <p>Opening tags are pushed onto the stack; closing tags must match the top and pop it. If the stack is empty at the end, the document is well-formed.</p>
-        <p class="example-hint">Example: <code>&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;</code></p>
+        <div class="html-mode-header">
+          <h2 id="html-mode-title">HTML Tag Nesting Validation</h2>
+          <div class="html-mode-toggle" id="html-mode-toggle">
+            <button class="mode-btn active" id="mode-btn-html" data-mode="html">HTML</button>
+            <button class="mode-btn" id="mode-btn-xml" data-mode="xml">XML</button>
+          </div>
+        </div>
+        <p id="html-mode-desc">Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags
+          (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags
+          (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.</p>
+        <p class="example-hint" id="html-mode-hint">
+          <strong>HTML:</strong> <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>
+          &nbsp;&mdash;&nbsp;
+          <strong>XML:</strong>
+          <code>&lt;catalog&gt;&lt;book&gt;&lt;title&gt;XML Guide&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;</code>
+        </p>
       </div>
       <div class="input-row">
         <div class="input-group full">
-          <label for="html-input">HTML / XML snippet</label>
-          <textarea id="html-input" rows="3" spellcheck="false">&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;</textarea>
+          <div class="label-with-presets">
+            <label for="html-input" id="html-input-label">HTML snippet</label>
+            <div class="preset-chips">
+              <span class="preset-label">Presets:</span>
+              <button type="button" class="chip-btn"
+                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;"
+                title="Fails in XML (unclosed p), passes in HTML (auto-close p)">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt;
+                (XML fail / HTML pass)</button>
+              <button type="button" class="chip-btn"
+                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;"
+                title="Passes in both">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/p&gt;&lt;/div&gt;
+                (Valid)</button>
+              <button type="button" class="chip-btn"
+                data-input="&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;"
+                title="Passes in HTML">&lt;p&gt;text&lt;br&gt;&lt;p&gt; (HTML void/auto)</button>
+            </div>
+          </div>
+          <textarea id="html-input" rows="3"
+            spellcheck="false">&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;</textarea>
         </div>
         <div class="btn-group-run">
           <button class="run-btn" id="html-run">Run Simulation</button>
@@ -245,12 +305,27 @@
               <button class="ctrl-btn" id="last-html" title="Last step">&raquo;</button>
             </div>
           </div>
+          <!-- HTML Tag Tree Visualization -->
+          <div class="viz-panel html-viz-panel" id="html-viz-panel">
+            <div class="panel-label">Tag Tree <span class="hint">(IDE-style nesting)</span></div>
+            <div class="html-tree-wrap" id="html-tree-wrap">
+              <div class="html-tree-placeholder">Tag structure will appear here as simulation runs...</div>
+            </div>
+          </div>
         </div>
         <div class="log-wrap">
           <div class="panel-label">Transition Log</div>
           <div class="log-table-wrap">
             <table class="log-table" id="log-html">
-              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>State</th>
+                  <th>Action</th>
+                  <th>Stack top</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
               <tbody></tbody>
             </table>
           </div>
@@ -265,13 +340,17 @@
     <section class="topic-panel" id="panel-nlp" role="tabpanel" aria-labelledby="tab-nlp">
       <div class="panel-desc">
         <h2>NLP &mdash; Shift-Reduce Syntax Parse</h2>
-        <p>Words are shifted (pushed) onto the stack. When the top symbols match a grammar rule, they are reduced (popped and replaced by the non-terminal). Accepts when the stack reduces to a single <code>S</code>.</p>
-        <p class="example-hint">Supported: <code>the, a, an, dog, cat, bird, fish, man, woman, child, boy, girl, tree, car, book, ball, chased, ate, saw, hit, liked, found, heard, loves, runs, catches, caught, big, small, red, old, young, quickly, slowly</code></p>
+        <p>Words are shifted (pushed) onto the stack. When the top symbols match a grammar rule, they are reduced
+          (popped and replaced by the non-terminal). Accepts when the stack reduces to a single <code>S</code>.</p>
+        <p class="example-hint">Supported:
+          <code>the, a, an, dog, cat, bird, fish, man, woman, child, boy, girl, tree, car, book, ball, chased, ate, saw, hit, liked, found, heard, loves, runs, catches, caught, big, small, red, old, young, quickly, slowly</code>
+        </p>
       </div>
       <div class="input-row">
         <div class="input-group">
           <label for="nlp-input">Sentence</label>
-          <input type="text" id="nlp-input" placeholder="e.g. the dog chased the cat" value="the dog chased the cat" autocomplete="off" spellcheck="false" />
+          <input type="text" id="nlp-input" placeholder="e.g. the dog chased the cat" value="the dog chased the cat"
+            autocomplete="off" spellcheck="false" />
         </div>
         <div class="btn-group-run">
           <button class="run-btn" id="nlp-run">Run Simulation</button>
@@ -316,7 +395,15 @@
           <div class="panel-label">Transition Log</div>
           <div class="log-table-wrap">
             <table class="log-table" id="log-nlp">
-              <thead><tr><th>#</th><th>State</th><th>Action</th><th>Stack top</th><th>Remaining</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>State</th>
+                  <th>Action</th>
+                  <th>Stack top</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
               <tbody></tbody>
             </table>
           </div>
@@ -328,9 +415,11 @@
   </main>
 
   <footer id="site-footer">
-    <span>Group 6 &middot; Roll 61&ndash;69 &middot; Comp C &nbsp;&middot;&nbsp; Theory of Computation &nbsp;&middot;&nbsp; PDA Applications</span>
+    <span>Group 6 &middot; Roll 61&ndash;69 &middot; Comp C &nbsp;&middot;&nbsp; Theory of Computation
+      &nbsp;&middot;&nbsp; PDA Applications</span>
   </footer>
 
   <script src="/static/app.js"></script>
 </body>
+
 </html>

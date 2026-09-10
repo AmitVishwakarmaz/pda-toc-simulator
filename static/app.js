@@ -9,6 +9,9 @@ const PLAY_INTERVAL_MS = 850;
 const sim = {};
 TOPICS.forEach(t => { sim[t] = { steps: [], cursor: 0, timer: null }; });
 
+// HTML / XML mode toggle
+var htmlMode = 'html'; // 'html' | 'xml'
+
 // State machine node definitions per topic
 const STATE_DEFS = {
   arithmetic: { nodes: ['q0', 'q_op', 'q_f'],         final: ['q_f'],  error: []        },
@@ -66,6 +69,46 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var nlpInput = document.getElementById('nlp-input');
   if (nlpInput) nlpInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') runTopic('nlp'); });
+
+  // HTML / XML mode toggle buttons
+  document.querySelectorAll('.mode-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      htmlMode = btn.dataset.mode;
+      document.querySelectorAll('.mode-btn').forEach(function (b) {
+        b.classList.toggle('active', b === btn);
+      });
+      // Update title and description
+      var title = document.getElementById('html-mode-title');
+      var desc  = document.getElementById('html-mode-desc');
+      var lbl   = document.getElementById('html-input-label');
+      if (htmlMode === 'xml') {
+        if (title) title.textContent = 'XML Tag Nesting Validation';
+        if (lbl)   lbl.textContent   = 'XML snippet';
+        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: every open tag <em>must</em> have a matching close tag. No void tags, no implicit closes (e.g. <code>&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt;</code> will fail because <code>&lt;p&gt;</code> is unclosed).';
+      } else {
+        if (title) title.textContent = 'HTML Tag Nesting Validation';
+        if (lbl)   lbl.textContent   = 'HTML snippet';
+        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.';
+      }
+      // Clear any previous result
+      var simArea = document.getElementById('sim-html');
+      if (simArea) simArea.style.display = 'none';
+      var errBox  = document.getElementById('err-html');
+      if (errBox)  errBox.style.display  = 'none';
+      var treeWrap = document.getElementById('html-tree-wrap');
+      if (treeWrap) treeWrap.innerHTML = '<div class="html-tree-placeholder">Tag structure will appear here as simulation runs...</div>';
+    });
+  });
+
+  // Preset chips
+  document.querySelectorAll('.chip-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var inp = document.getElementById('html-input');
+      if (inp && btn.dataset.input) {
+        inp.value = btn.dataset.input;
+      }
+    });
+  });
 });
 
 // ----------------------------------------------------------------
@@ -144,7 +187,7 @@ function getPayload(topic) {
   if (topic === 'html') {
     var html = document.getElementById('html-input').value.trim();
     if (!html) { showErr(topic, 'Please enter an HTML/XML snippet.'); return null; }
-    return { html: html };
+    return { html: html, mode: htmlMode };
   }
   if (topic === 'nlp') {
     var sent = document.getElementById('nlp-input').value.trim();
@@ -557,6 +600,294 @@ function renderSyntaxTree(treeRoots) {
 }
 
 // ----------------------------------------------------------------
+// Topic A: Arithmetic Expression Tape Visualization
+// Shows operand tokens in a horizontal tape; operator steps animate
+// a merge between the two top tokens into a result.
+// ----------------------------------------------------------------
+
+function renderArithViz(step) {
+  var stage = document.getElementById('arith-stage');
+  if (!stage) return;
+
+  var action   = step.action || '';
+  var stackRaw = (step.stack || []).filter(function(s) { return s !== 'Z0'; });
+  // stack[0] = top, so reverse for left-to-right bottom->top display
+  var stackItems = stackRaw.slice().reverse(); // index 0 = bottom, last = top
+
+  var isAccept = step.state === 'q_f';
+  var isOp     = /Compute/.test(action);
+  var isPush   = /PUSH/.test(action) && !isOp;
+
+  // Extract operator symbol and result if present
+  var opSym = null, resultVal = null;
+  if (isOp) {
+    var mOp = action.match(/Compute\s+([\d.]+)\s+([+\-*\/x%])\s+([\d.]+)\s*=\s*([\d.]+)/);
+    if (mOp) { opSym = mOp[2]; resultVal = mOp[4]; }
+  }
+
+  // Format a numeric value neatly
+  function fmt(v) {
+    var n = parseFloat(v);
+    if (isNaN(n)) return String(v);
+    return Number.isInteger(n) ? String(n) : parseFloat(n.toFixed(4)).toString();
+  }
+
+  stage.innerHTML = '';
+
+  // ── Title label ──────────────────────────────────
+  var lbl = document.createElement('div');
+  lbl.className = 'arith-tape-label';
+  lbl.textContent = isAccept ? 'Final Result' : (stackItems.length === 0 ? 'Stack empty' : 'Evaluation Stack');
+  stage.appendChild(lbl);
+
+  // ── Tape row of tokens ──────────────────────────
+  var tape = document.createElement('div');
+  tape.className = 'arith-tape';
+
+  if (stackItems.length === 0 && !isAccept) {
+    var empty = document.createElement('span');
+    empty.className = 'arith-tape-empty';
+    empty.textContent = '(empty)';
+    tape.appendChild(empty);
+  } else {
+    stackItems.forEach(function(val, idx) {
+      var isTop    = (idx === stackItems.length - 1);
+      var isResult = isAccept && isTop;
+      var tok = document.createElement('div');
+      tok.className = 'arith-token' +
+        (isResult ? ' arith-token-result' : (isTop ? ' arith-token-top' : ''));
+      tok.setAttribute('title', isTop ? 'TOP of stack' : 'stack item');
+
+      var num = document.createElement('span');
+      num.className = 'arith-token-num';
+      num.textContent = fmt(val);
+      tok.appendChild(num);
+
+      if (isTop && !isResult) {
+        var badge = document.createElement('span');
+        badge.className = 'arith-token-badge';
+        badge.textContent = 'TOP';
+        tok.appendChild(badge);
+      }
+      if (isResult) {
+        var rbadge = document.createElement('span');
+        rbadge.className = 'arith-token-badge arith-token-result-badge';
+        rbadge.textContent = '= RESULT';
+        tok.appendChild(rbadge);
+      }
+
+      // Separator arrow between tokens
+      if (idx < stackItems.length - 1) {
+        var sep = document.createElement('div');
+        sep.className = 'arith-tape-sep';
+        sep.textContent = '\u2192'; // →
+        tape.appendChild(sep);
+      }
+
+      tape.appendChild(tok);
+    });
+  }
+
+  stage.appendChild(tape);
+
+  // ── Operator burst (shown only on compute steps) ─
+  if (isOp && opSym) {
+    var burst = document.createElement('div');
+    burst.className = 'arith-op-burst';
+    var opLabel = document.createElement('span');
+    opLabel.className = 'arith-op-sym';
+    opLabel.textContent = opSym;
+    var eqLabel = document.createElement('span');
+    eqLabel.className = 'arith-op-eq';
+    eqLabel.textContent = resultVal ? ('= ' + fmt(resultVal)) : '';
+    burst.appendChild(opLabel);
+    burst.appendChild(eqLabel);
+    stage.appendChild(burst);
+  }
+
+  // ── Stack depth indicator ───────────────────────
+  var depthBar = document.createElement('div');
+  depthBar.className = 'arith-depth-bar';
+  var filled = Math.min(stackItems.length, 6);
+  for (var di = 0; di < 6; di++) {
+    var pip = document.createElement('div');
+    pip.className = 'arith-depth-pip' + (di < filled ? ' filled' : '');
+    depthBar.appendChild(pip);
+  }
+  var depthLbl = document.createElement('span');
+  depthLbl.className = 'arith-depth-lbl';
+  depthLbl.textContent = 'Depth: ' + stackItems.length;
+  depthBar.appendChild(depthLbl);
+  stage.appendChild(depthBar);
+}
+
+// ----------------------------------------------------------------
+// Topic C: HTML Tag Tree IDE Visualization
+// Uses step.tag_event and step.tag_name from backend.
+// Error only turns the specific <tagname> red, not the whole line.
+// ----------------------------------------------------------------
+
+function renderHtmlTagTree(step, allSteps, stepIndex) {
+  var wrap = document.getElementById('html-tree-wrap');
+  if (!wrap) return;
+
+  // Reconstruct the rendered tree from backend step metadata
+  // Each step carries tag_event and tag_name fields
+  var events = [];
+  var depthTracker = 0;
+  var openStack    = []; // indices into events for open tags
+  var isError      = false;
+  var isAccept     = false;
+  var errorTagName = null;
+
+  for (var si = 0; si <= stepIndex && si < allSteps.length; si++) {
+    var s        = allSteps[si];
+    var ev       = s.tag_event || '';
+    var tagName  = s.tag_name  || null;
+    var isCurrent = (si === stepIndex);
+
+    if (ev === 'init') {
+      // nothing to render
+    } else if (ev === 'open') {
+      events.push({
+        type: 'open', tag: tagName, depth: depthTracker,
+        status: isCurrent ? 'active' : 'pending'
+      });
+      openStack.push(events.length - 1);
+      depthTracker++;
+    } else if (ev === 'close_match') {
+      if (openStack.length > 0) {
+        var openIdx = openStack.pop();
+        events[openIdx].status = 'matched';
+        depthTracker = events[openIdx].depth;
+        events.push({
+          type: 'close', tag: tagName, depth: depthTracker,
+          status: isCurrent ? 'active' : 'matched'
+        });
+      }
+    } else if (ev === 'error') {
+      isError = true;
+      errorTagName = tagName;
+      events.push({
+        type: 'close_error', tag: tagName, depth: Math.max(0, depthTracker - 1),
+        status: 'error'
+      });
+    } else if (ev === 'void') {
+      events.push({
+        type: 'void', tag: tagName, depth: depthTracker,
+        status: isCurrent ? 'active' : 'void'
+      });
+    } else if (ev === 'auto_close') {
+      if (openStack.length > 0) {
+        var acIdx = openStack.pop();
+        if (events[acIdx]) events[acIdx].status = 'matched';
+        depthTracker = events[acIdx] ? events[acIdx].depth : Math.max(0, depthTracker - 1);
+        events.push({
+          type: 'auto_close', tag: tagName, depth: depthTracker,
+          status: isCurrent ? 'active' : 'matched'
+        });
+      }
+    } else if (ev === 'text') {
+      events.push({
+        type: 'text', tag: s.action, depth: depthTracker,
+        status: isCurrent ? 'active' : 'pending'
+      });
+    } else if (ev === 'accept') {
+      isAccept = true;
+    }
+  }
+
+  // ── Render ────────────────────────────────────────
+  wrap.innerHTML = '';
+
+  if (events.length === 0) {
+    var ph = document.createElement('div');
+    ph.className = 'html-tree-placeholder';
+    ph.textContent = 'Tag structure will appear here as simulation runs...';
+    wrap.appendChild(ph);
+    return;
+  }
+
+  events.forEach(function(ev) {
+    var line = document.createElement('div');
+    var isActive  = ev.status === 'active';
+    var isMatched = ev.status === 'matched';
+    // Only void / auto-close tags without error get a neutral style
+    line.className = 'html-tag-line' +
+      (isActive  ? ' ht-active'  : '') +
+      (isMatched ? ' ht-matched ht-closed' : '');
+    // We do NOT add ht-error to the whole line
+
+    // Indent guides
+    for (var d = 0; d < ev.depth; d++) {
+      var ind = document.createElement('span');
+      ind.className = 'ht-indent';
+      line.appendChild(ind);
+    }
+
+    if (ev.type === 'text') {
+      // Extract just the quoted text from action string
+      var txtMatch = (ev.tag || '').match(/READ text '([^']+)'/);
+      var displayTxt = txtMatch ? txtMatch[1] : (ev.tag || '').slice(0, 20);
+      var sp = document.createElement('span');
+      sp.className = 'ht-text';
+      sp.textContent = '"' + displayTxt + '"';
+      line.appendChild(sp);
+
+    } else if (ev.type === 'open') {
+      line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
+        '<span class="ht-tagname">' + (ev.tag || '') + '</span>' +
+        '<span class="ht-bracket">&gt;</span>';
+
+    } else if (ev.type === 'close_match' || ev.type === 'close') {
+      line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
+        '<span class="ht-slash">/</span>' +
+        '<span class="ht-tagname">' + (ev.tag || '') + '</span>' +
+        '<span class="ht-bracket">&gt;</span>';
+
+    } else if (ev.type === 'close_error') {
+      // ERROR: only the tagname turns red, rest is normal
+      line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
+        '<span class="ht-slash">/</span>' +
+        '<span class="ht-tagname ht-tagname-error">' + (ev.tag || '') + '</span>' +
+        '<span class="ht-bracket">&gt;</span>' +
+        '<span class="ht-error-marker"> &#9888; mismatch</span>';
+
+    } else if (ev.type === 'void') {
+      line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
+        '<span class="ht-tagname ht-tagname-void">' + (ev.tag || '') + '</span>' +
+        '<span class="ht-bracket">/&gt;</span>' +
+        '<span class="ht-void-badge">void</span>';
+
+    } else if (ev.type === 'auto_close') {
+      line.innerHTML += '<span class="ht-bracket">&lt;/</span>' +
+        '<span class="ht-tagname ht-tagname-auto">' + (ev.tag || '') + '</span>' +
+        '<span class="ht-bracket">&gt;</span>' +
+        '<span class="ht-auto-badge">auto</span>';
+    }
+
+    wrap.appendChild(line);
+  });
+
+  // Status badge
+  if (isAccept) {
+    var badge = document.createElement('div');
+    badge.className = 'html-status-badge accept';
+    badge.textContent = '\u2713 Well-formed \u2014 ACCEPT';
+    wrap.appendChild(badge);
+  } else if (isError) {
+    var ebadge = document.createElement('div');
+    ebadge.className = 'html-status-badge error';
+    ebadge.textContent = '\u2717 ' + (errorTagName ? '</' + errorTagName + '> mismatch' : 'Tag error') + ' \u2014 REJECT';
+    wrap.appendChild(ebadge);
+  }
+
+  // Scroll active line into view
+  var activeLine = wrap.querySelector('.ht-active');
+  if (activeLine) activeLine.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ----------------------------------------------------------------
 // Step Renderer (updated to call viz functions)
 // ----------------------------------------------------------------
 
@@ -601,6 +932,12 @@ function renderStep(topic, index) {
   }
   if (topic === 'nlp') {
     renderSyntaxTree(s.tree || []);
+  }
+  if (topic === 'arithmetic') {
+    renderArithViz(s);
+  }
+  if (topic === 'html') {
+    renderHtmlTagTree(s, steps, index);
   }
 
   // Log table highlight

@@ -232,12 +232,29 @@ def run_hanoi(n: int, source: str, dest: str, aux: str):
 # TOPIC C: HTML/XML Tag Validation
 # ─────────────────────────────────────────────
 
-def run_html(html_input: str):
+# Void/self-closing tags: never need a closing tag, stack unchanged
+# d(q0, <br>, X) = (q0, X)
+VOID_TAGS = {
+    'br', 'img', 'hr', 'input', 'meta', 'link', 'area', 'base',
+    'col', 'embed', 'param', 'source', 'track', 'wbr',
+}
+
+# Auto-close tags: implicitly close at end or when sibling of same type opens
+# d(q0, e, <p>) = (q0, e)
+AUTO_CLOSE_TAGS = {
+    'p', 'li', 'dt', 'dd', 'td', 'th', 'tr', 'colgroup',
+    'thead', 'tbody', 'tfoot', 'option', 'optgroup', 'caption',
+}
+
+def run_html(html_input: str, mode: str = 'html'):
     """
     Simulates PDA for nested HTML/XML tag validation.
-    Tokenises input into open tags, close tags, and text chunks.
+    mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules).
+    mode='xml':  strict -- every open tag must have a close tag;
+                 only <tag/> self-closing syntax avoids pushing to stack.
     """
-    token_re = re.compile(r'(<\/[^>]+>|<[^/>][^>]*>|[^<]+)')
+    is_xml = (mode == 'xml')
+    token_re = re.compile(r'(<\/[^>]+>|<[^/>][^>]*>|<[^>]*/\s*>|[^<]+)')
     raw_tokens = token_re.findall(html_input.strip())
     tokens = [t.strip() for t in raw_tokens if t.strip()]
 
@@ -253,6 +270,8 @@ def run_html(html_input: str):
         "action": "Initial configuration",
         "arrow": "-- (start)",
         "valid": None,
+        "tag_event": "init",
+        "tag_name": None,
     })
 
     error = None
@@ -260,19 +279,41 @@ def run_html(html_input: str):
         rem = ' '.join(tokens[i+1:]) if i+1 < len(tokens) else '(empty)'
 
         if token.startswith('</'):
+            # -- Closing tag --
             tag_name = re.sub(r'[<>/\s]', '', token).lower()
+
+            # Pop any auto-close tags sitting on top (HTML mode only)
+            if not is_xml:
+                while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS and stack[-1].lower() != tag_name:
+                    popped = stack.pop()
+                    cur_rem = token + (' ' + rem if rem != '(empty)' else '')
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": state,
+                        "input_remaining": cur_rem,
+                        "stack": list(reversed(stack)),
+                        "action": "AUTO-CLOSE <{}> -> POP".format(popped),
+                        "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(popped),
+                        "valid": None,
+                        "tag_event": "auto_close",
+                        "tag_name": popped,
+                    })
+
             if len(stack) <= 1:
-                error = "Closing tag </{}>: stack is empty, nothing to match".format(tag_name)
+                error = "Closing tag </{}>: stack is empty".format(tag_name)
                 steps.append({
                     "step": len(steps) + 1,
                     "state": "q_err",
                     "input_remaining": rem,
                     "stack": list(reversed(stack)),
-                    "action": "READ '</{}>' -> ERROR: Stack is empty".format(tag_name),
-                    "arrow": "q0 -> q_err",
+                    "action": "READ '</{}>': ERROR stack empty -- no open tag to match".format(tag_name),
+                    "arrow": "q0 -> q_err (no match on stack)",
                     "valid": False,
+                    "tag_event": "error",
+                    "tag_name": tag_name,
                 })
                 break
+
             top = stack[-1]
             if top.lower() == tag_name:
                 stack.pop()
@@ -282,8 +323,10 @@ def run_html(html_input: str):
                     "input_remaining": rem,
                     "stack": list(reversed(stack)),
                     "action": "READ '</{}>' -> MATCH top '{}' -> POP".format(tag_name, top),
-                    "arrow": "q0 -> q0",
+                    "arrow": "δ(q0, </{}>, {}) = (q0, ε)".format(tag_name, top),
                     "valid": None,
+                    "tag_event": "close_match",
+                    "tag_name": tag_name,
                 })
             else:
                 error = "Mismatch: expected </{}> but got </{}>".format(top, tag_name)
@@ -292,25 +335,69 @@ def run_html(html_input: str):
                     "state": "q_err",
                     "input_remaining": rem,
                     "stack": list(reversed(stack)),
-                    "action": "READ '</{}>' -> MISMATCH: top is '{}' -> ERROR".format(tag_name, top),
-                    "arrow": "q0 -> q_err",
+                    "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
+                    "arrow": "q0 -> q_err (mismatch)",
                     "valid": False,
+                    "tag_event": "error",
+                    "tag_name": tag_name,
                 })
                 break
+
         elif token.startswith('<'):
+            # -- Opening or self-closing tag --
             m = re.match(r'<([^\s/>]+)', token)
             tag_name = m.group(1).lower() if m else token
-            stack.append(tag_name)
-            steps.append({
-                "step": len(steps) + 1,
-                "state": state,
-                "input_remaining": rem,
-                "stack": list(reversed(stack)),
-                "action": "READ '{}' -> PUSH '{}'".format(token, tag_name),
-                "arrow": "q0 -> q0",
-                "valid": None,
-            })
+            is_self_closing = token.rstrip().endswith('/>')
+            top = stack[-1]
+
+            if is_self_closing or (not is_xml and tag_name in VOID_TAGS):
+                # Void: stack unchanged (HTML void tags like <br> or self-closing <tag/>)
+                kind = 'self-closing' if is_self_closing else 'void tag'
+                rule_tag = tag_name if (not is_self_closing and tag_name == 'br') else (token[:15] if is_self_closing else tag_name)
+                steps.append({
+                    "step": len(steps) + 1,
+                    "state": state,
+                    "input_remaining": rem,
+                    "stack": list(reversed(stack)),
+                    "action": "READ '{}' -> {} (stack unchanged)".format(token[:30], kind),
+                    "arrow": "δ(q0, <{}>, {}) = (q0, {})".format(rule_tag, top, top),
+                    "valid": None,
+                    "tag_event": "void",
+                    "tag_name": tag_name,
+                })
+            else:
+                # Auto-close sibling (HTML mode only):
+                if not is_xml and len(stack) > 1 and stack[-1].lower() == tag_name and tag_name in AUTO_CLOSE_TAGS:
+                    stack.pop()
+                    cur_rem = token + (' ' + rem if rem != '(empty)' else '')
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": state,
+                        "input_remaining": cur_rem,
+                        "stack": list(reversed(stack)),
+                        "action": "AUTO-CLOSE previous <{}> (sibling opened) -> POP".format(tag_name),
+                        "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(tag_name),
+                        "valid": None,
+                        "tag_event": "auto_close",
+                        "tag_name": tag_name,
+                    })
+
+                prev_top = stack[-1]
+                stack.append(tag_name)
+                steps.append({
+                    "step": len(steps) + 1,
+                    "state": state,
+                    "input_remaining": rem,
+                    "stack": list(reversed(stack)),
+                    "action": "READ '{}' -> PUSH '{}'".format(token[:30], tag_name),
+                    "arrow": "δ(q0, <{}>, {}) = (q0, {} {})".format(tag_name, prev_top, tag_name, prev_top),
+                    "valid": None,
+                    "tag_event": "open",
+                    "tag_name": tag_name,
+                })
         else:
+            # -- Text content --
+            top = stack[-1]
             short = token[:24] + ('...' if len(token) > 24 else '')
             steps.append({
                 "step": len(steps) + 1,
@@ -318,11 +405,29 @@ def run_html(html_input: str):
                 "input_remaining": rem,
                 "stack": list(reversed(stack)),
                 "action": "READ text '{}' -> stack unchanged".format(short),
-                "arrow": "q0 -> q0",
+                "arrow": "δ(q0, text, {}) = (q0, {})".format(top, top),
                 "valid": None,
+                "tag_event": "text",
+                "tag_name": None,
             })
 
     if not error:
+        # Auto-close any remaining auto-close tags before final check (HTML mode only)
+        if not is_xml:
+            while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS:
+                popped = stack.pop()
+                steps.append({
+                    "step": len(steps) + 1,
+                    "state": state,
+                    "input_remaining": "(empty)",
+                    "stack": list(reversed(stack)),
+                    "action": "AUTO-CLOSE <{}> at end of input -> POP".format(popped),
+                    "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(popped),
+                    "valid": None,
+                    "tag_event": "auto_close",
+                    "tag_name": popped,
+                })
+
         if stack == ['Z0']:
             state = 'q_f'
             steps.append({
@@ -331,8 +436,10 @@ def run_html(html_input: str):
                 "input_remaining": "(empty)",
                 "stack": ['Z0'],
                 "action": "Input exhausted, stack = [Z0] -> ACCEPT (well-formed)",
-                "arrow": "q0 -> q_f",
+                "arrow": "δ(q0, ε, Z0) = (qf, Z0)",
                 "valid": True,
+                "tag_event": "accept",
+                "tag_name": None,
             })
         else:
             unclosed = [s for s in stack if s != 'Z0']
@@ -342,11 +449,14 @@ def run_html(html_input: str):
                 "input_remaining": "(empty)",
                 "stack": list(reversed(stack)),
                 "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
-                "arrow": "q0 -> q_err",
+                "arrow": "q0 -> q_err (unclosed tags)",
                 "valid": False,
+                "tag_event": "error",
+                "tag_name": unclosed[0] if unclosed else None,
             })
 
     return steps
+
 
 
 # ─────────────────────────────────────────────
@@ -530,11 +640,14 @@ def api_hanoi():
 def api_html():
     data = request.get_json()
     html = data.get('html', '').strip()
+    mode = data.get('mode', 'html').strip().lower()
+    if mode not in ('html', 'xml'):
+        mode = 'html'
     if not html:
-        return jsonify({"error": "HTML input is empty"}), 400
+        return jsonify({"error": "HTML/XML input is empty"}), 400
     try:
-        steps = run_html(html)
-        return jsonify({"steps": steps})
+        steps = run_html(html, mode=mode)
+        return jsonify({"steps": steps, "mode": mode})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
