@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (htmlMode === 'xml') {
         if (title) title.textContent = 'XML Tag Nesting Validation';
         if (lbl)   lbl.textContent   = 'XML snippet';
-        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: enforces the single-root element rule (root tag close enters post-root state <code>q2</code>; extra root elements rejected); all tags must balance; no void tags or raw root text.';
+        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>); root element opens from <code>q0</code>; nested tags only over existing tags; all tags must balance; multiple roots and raw root text are rejected.';
       } else {
         if (title) title.textContent = 'HTML Tag Nesting Validation';
         if (lbl)   lbl.textContent   = 'HTML snippet';
@@ -211,7 +211,7 @@ function buildStateDiagram(topic) {
   container.innerHTML = '';
   var def = STATE_DEFS[topic];
   if (topic === 'html' && htmlMode === 'xml') {
-    def = { nodes: ['q0', 'q2', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
+    def = { nodes: ['q0', 'q1', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
   }
 
   def.nodes.forEach(function (name, i) {
@@ -245,7 +245,7 @@ function sanitiseId(name) {
 function highlightState(topic, stateName) {
   var def = STATE_DEFS[topic];
   if (topic === 'html' && htmlMode === 'xml') {
-    def = { nodes: ['q0', 'q2', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
+    def = { nodes: ['q0', 'q1', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
   }
 
   def.nodes.forEach(function (name) {
@@ -886,7 +886,7 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
       line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
         '<span class="ht-tagname ht-tagname-error">' + (ev.tag || '') + '</span>' +
         '<span class="ht-bracket">&gt;</span>' +
-        '<span class="ht-error-marker"> &#9888; second root rejected (q2)</span>';
+        '<span class="ht-error-marker"> &#9888; second root rejected in qf</span>';
     } else if (ev.type === 'void') {
       line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
         '<span class="ht-tagname ht-tagname-void">' + (ev.tag || '') + '</span>' +

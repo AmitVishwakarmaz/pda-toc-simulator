@@ -249,14 +249,14 @@ AUTO_CLOSE_TAGS = {
 def run_html(html_input: str, mode: str = 'html'):
     """
     Simulates PDA for nested HTML/XML tag validation.
-    mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules).
-    mode='xml':  strict -- every open tag must have a close tag;
-                 only <tag/> self-closing syntax avoids pushing to stack;
-                 text is only valid when stack top is an open element tag (T),
-                 never when stack top is Z0 (rejects raw root text);
-                 single-root element rule: closing root tag transitions PDA into
-                 completed post-root state q2; reading any new opening tag in q2
-                 halts and rejects immediately.
+    mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules, start in q0).
+    mode='xml':  strict 3-state DPDA (q0, q1, qf):
+                 - δ(q0, <T>, Z0) = (q1, T Z0) [open root tag only from start state q0]
+                 - δ(q1, <T2>, T1) = (q1, T2 T1) [nested open tags only over existing tag T1 != Z0]
+                 - δ(q1, text, T) = (q1, T) [consume text content only when T != Z0]
+                 - δ(q1, </T>, T) = (q1, ε) [pop matching closing tags]
+                 - δ(q1, ε, Z0) = (qf, Z0) [move to final state qf upon uncovering Z0]
+                 All other combinations undefined (rejects raw root text and multiple roots).
     """
     is_xml = (mode == 'xml')
     token_re = re.compile(r'(<\/[^>]+>|<[^/>][^>]*>|<[^>]*/\s*>|[^<]+)')
@@ -280,64 +280,294 @@ def run_html(html_input: str, mode: str = 'html'):
     })
 
     error = None
-    for i, token in enumerate(tokens):
-        rem = ' '.join(tokens[i+1:]) if i+1 < len(tokens) else '(empty)'
 
-        # In XML mode, if already in completed post-root state q2, reject any new element, text, or tag
-        if is_xml and state == 'q2':
-            if token.startswith('<') and not token.startswith('</'):
-                m = re.match(r'<([^\s/>]+)', token)
-                tag_name = m.group(1).lower() if m else token
-                error = "Multiple root elements not allowed in XML: read '<{}>' in post-root state q2".format(tag_name)
+    if is_xml:
+        # ─────────────────────────────────────────────────────────
+        # XML Mode: Strict 3-state DPDA (q0, q1, qf)
+        # ─────────────────────────────────────────────────────────
+        for i, token in enumerate(tokens):
+            rem = ' '.join(tokens[i+1:]) if i+1 < len(tokens) else '(empty)'
+
+            # ── State q_f: Final state (root element already closed, Z0 uncovered) ──
+            # No transitions are defined from q_f; any subsequent token halts and rejects.
+            if state == 'q_f':
+                if token.startswith('<') and not token.startswith('</'):
+                    m = re.match(r'<([^\s/>]+)', token)
+                    tag_name = m.group(1).lower() if m else token
+                    error = "Multiple root elements not allowed in XML: read '<{}>' in final state qf".format(tag_name)
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ '{}': ERROR undefined transition in final state qf (multiple roots) -> REJECT".format(token[:30]),
+                        "arrow": "δ(qf, <{}>, Z0) = undefined -> q_err".format(tag_name),
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": tag_name,
+                    })
+                    break
+                elif token.startswith('</'):
+                    tag_name = re.sub(r'[<>/\s]', '', token).lower()
+                    error = "Unexpected closing tag '</{}>' in final state qf".format(tag_name)
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ '</{}>': ERROR undefined transition in final state qf -> REJECT".format(tag_name),
+                        "arrow": "δ(qf, </{}>, Z0) = undefined -> q_err".format(tag_name),
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": tag_name,
+                    })
+                    break
+                else:
+                    short = token[:24] + ('...' if len(token) > 24 else '')
+                    error = "Trailing text '{}' after root element in XML".format(short)
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ text '{}': ERROR undefined transition in final state qf (trailing text) -> REJECT".format(short),
+                        "arrow": "δ(qf, text, Z0) = undefined -> q_err",
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": None,
+                    })
+                    break
+
+            # ── State q0: Start state (open root tag only) ──
+            elif state == 'q0':
+                if token.startswith('<') and not token.startswith('</'):
+                    m = re.match(r'<([^\s/>]+)', token)
+                    tag_name = m.group(1).lower() if m else token
+                    is_self_closing = token.rstrip().endswith('/>')
+                    rule_tag = token[:15] if is_self_closing else tag_name
+
+                    if is_self_closing:
+                        # Self-closing root tag: opens in q0 -> q1, immediately reveals Z0 -> qf
+                        state = 'q1'
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '{}' -> self-closing root tag (q0 -> q1)".format(token[:30]),
+                            "arrow": "δ(q0, <{}>, Z0) = (q1, Z0)".format(rule_tag),
+                            "valid": None,
+                            "tag_event": "void",
+                            "tag_name": tag_name,
+                        })
+                        state = 'q_f'
+                        is_end = (rem == '(empty)')
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "Root element closed, uncover Z0 -> ACCEPT in final state qf" if is_end else "Root element closed, uncover Z0 -> move to final state qf",
+                            "arrow": "δ(q1, ε, Z0) = (qf, Z0)",
+                            "valid": True if is_end else None,
+                            "tag_event": "accept" if is_end else "close_match",
+                            "tag_name": None,
+                        })
+                    else:
+                        # δ(q0, <T>, Z0) = (q1, T Z0): Open root tag only from start state q0
+                        stack.append(tag_name)
+                        state = 'q1'
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '{}' -> PUSH root '{}' (q0 -> q1)".format(token[:30], tag_name),
+                            "arrow": "δ(q0, <{}>, Z0) = (q1, {} Z0)".format(tag_name, tag_name),
+                            "valid": None,
+                            "tag_event": "open",
+                            "tag_name": tag_name,
+                        })
+                elif token.startswith('</'):
+                    tag_name = re.sub(r'[<>/\s]', '', token).lower()
+                    error = "Closing tag '</{}>' in start state q0: no open root tag".format(tag_name)
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ '</{}>': ERROR undefined transition in state q0 (no open root tag) -> REJECT".format(tag_name),
+                        "arrow": "δ(q0, </{}>, Z0) = undefined -> q_err".format(tag_name),
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": tag_name,
+                    })
+                    break
+                else:
+                    short = token[:24] + ('...' if len(token) > 24 else '')
+                    error = "Raw root text '{}' in start state q0".format(short)
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ text '{}': ERROR undefined transition in state q0 (raw root text) -> REJECT".format(short),
+                        "arrow": "δ(q0, text, Z0) = undefined -> q_err",
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": None,
+                    })
+                    break
+
+            # ── State q1: Active parsing state inside open root element ──
+            elif state == 'q1':
+                top = stack[-1]
+
+                if token.startswith('</'):
+                    # δ(q1, </T>, T) = (q1, ε): Pop matching closing tags
+                    tag_name = re.sub(r'[<>/\s]', '', token).lower()
+                    if top.lower() == tag_name:
+                        stack.pop()
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '</{}>' -> MATCH top '{}' -> POP".format(tag_name, top),
+                            "arrow": "δ(q1, </{}>, {}) = (q1, ε)".format(tag_name, top),
+                            "valid": None,
+                            "tag_event": "close_match",
+                            "tag_name": tag_name,
+                        })
+                        # δ(q1, ε, Z0) = (qf, Z0): Move to final state qf upon uncovering Z0
+                        if stack == ['Z0']:
+                            state = 'q_f'
+                            is_end = (rem == '(empty)')
+                            steps.append({
+                                "step": len(steps) + 1,
+                                "state": state,
+                                "input_remaining": rem,
+                                "stack": ['Z0'],
+                                "action": "Root element closed, uncover Z0 -> ACCEPT in final state qf" if is_end else "Root element closed, uncover Z0 -> move to final state qf",
+                                "arrow": "δ(q1, ε, Z0) = (qf, Z0)",
+                                "valid": True if is_end else None,
+                                "tag_event": "accept" if is_end else "close_match",
+                                "tag_name": None,
+                            })
+                    else:
+                        error = "Mismatch: expected </{}> but got </{}>".format(top, tag_name)
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": "q_err",
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
+                            "arrow": "q1 -> q_err (mismatch)",
+                            "valid": False,
+                            "tag_event": "error",
+                            "tag_name": tag_name,
+                        })
+                        break
+
+                elif token.startswith('<'):
+                    # δ(q1, <T2>, T1) = (q1, T2 T1): Allow nested opening tags only over T1 != Z0
+                    m = re.match(r'<([^\s/>]+)', token)
+                    tag_name = m.group(1).lower() if m else token
+                    is_self_closing = token.rstrip().endswith('/>')
+                    rule_tag = token[:15] if is_self_closing else tag_name
+
+                    if is_self_closing:
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '{}' -> self-closing nested tag (stack unchanged)".format(token[:30]),
+                            "arrow": "δ(q1, <{}>, {}) = (q1, {})".format(rule_tag, top, top),
+                            "valid": None,
+                            "tag_event": "void",
+                            "tag_name": tag_name,
+                        })
+                    else:
+                        stack.append(tag_name)
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '{}' -> PUSH nested '{}'".format(token[:30], tag_name),
+                            "arrow": "δ(q1, <{}>, {}) = (q1, {} {})".format(tag_name, top, tag_name, top),
+                            "valid": None,
+                            "tag_event": "open",
+                            "tag_name": tag_name,
+                        })
+
+                else:
+                    # δ(q1, text, T) = (q1, T): Consume text content only when inside open element (T != Z0)
+                    short = token[:24] + ('...' if len(token) > 24 else '')
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": state,
+                        "input_remaining": rem,
+                        "stack": list(reversed(stack)),
+                        "action": "READ text '{}' -> stack unchanged".format(short),
+                        "arrow": "δ(q1, text, {}) = (q1, {})".format(top, top),
+                        "valid": None,
+                        "tag_event": "text",
+                        "tag_name": None,
+                    })
+
+        if not error:
+            if state == 'q_f' and stack == ['Z0']:
+                if steps[-1]['valid'] is not True:
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_f",
+                        "input_remaining": "(empty)",
+                        "stack": ['Z0'],
+                        "action": "Input exhausted, stack = [Z0] -> ACCEPT in final state qf (well-formed XML single root)",
+                        "arrow": "qf (accept)",
+                        "valid": True,
+                        "tag_event": "accept",
+                        "tag_name": None,
+                    })
+            elif stack != ['Z0']:
+                unclosed = [s for s in stack if s != 'Z0']
                 steps.append({
                     "step": len(steps) + 1,
                     "state": "q_err",
-                    "input_remaining": rem,
+                    "input_remaining": "(empty)",
                     "stack": list(reversed(stack)),
-                    "action": "READ '{}': ERROR multiple root elements not allowed in state q2 -> REJECT".format(token[:30]),
-                    "arrow": "δ(q2, <{}>, Z0) = (q_err, Z0)".format(tag_name),
+                    "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
+                    "arrow": "q1 -> q_err (unclosed tags)",
                     "valid": False,
                     "tag_event": "error",
-                    "tag_name": tag_name,
+                    "tag_name": unclosed[0] if unclosed else None,
                 })
-                break
-            elif token.startswith('</'):
-                tag_name = re.sub(r'[<>/\s]', '', token).lower()
-                error = "Unexpected closing tag '</{}>' in post-root state q2".format(tag_name)
-                steps.append({
-                    "step": len(steps) + 1,
-                    "state": "q_err",
-                    "input_remaining": rem,
-                    "stack": list(reversed(stack)),
-                    "action": "READ '</{}>': ERROR unexpected closing tag in state q2 -> REJECT".format(tag_name),
-                    "arrow": "δ(q2, </{}>, Z0) = (q_err, Z0)".format(tag_name),
-                    "valid": False,
-                    "tag_event": "error",
-                    "tag_name": tag_name,
-                })
-                break
             else:
-                short = token[:24] + ('...' if len(token) > 24 else '')
-                error = "Trailing text '{}' outside root element in XML".format(short)
                 steps.append({
                     "step": len(steps) + 1,
                     "state": "q_err",
-                    "input_remaining": rem,
-                    "stack": list(reversed(stack)),
-                    "action": "READ text '{}': ERROR trailing text not allowed in post-root state q2 -> REJECT".format(short),
-                    "arrow": "δ(q2, text, Z0) = (q_err, Z0)",
+                    "input_remaining": "(empty)",
+                    "stack": ['Z0'],
+                    "action": "Input exhausted -- no root element found in XML -> REJECT",
+                    "arrow": "q0 -> q_err (no root element)",
                     "valid": False,
                     "tag_event": "error",
                     "tag_name": None,
                 })
-                break
 
-        if token.startswith('</'):
-            # -- Closing tag --
-            tag_name = re.sub(r'[<>/\s]', '', token).lower()
+    else:
+        # ─────────────────────────────────────────────────────────
+        # HTML Mode: Lenient rules (void tags, auto-close tags, multi-root)
+        # ─────────────────────────────────────────────────────────
+        for i, token in enumerate(tokens):
+            rem = ' '.join(tokens[i+1:]) if i+1 < len(tokens) else '(empty)'
 
-            # Pop any auto-close tags sitting on top (HTML mode only)
-            if not is_xml:
+            if token.startswith('</'):
+                tag_name = re.sub(r'[<>/\s]', '', token).lower()
+
+                # Pop any auto-close tags sitting on top
                 while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS and stack[-1].lower() != tag_name:
                     popped = stack.pop()
                     cur_rem = token + (' ' + rem if rem != '(empty)' else '')
@@ -353,39 +583,24 @@ def run_html(html_input: str, mode: str = 'html'):
                         "tag_name": popped,
                     })
 
-            if len(stack) <= 1:
-                error = "Closing tag </{}>: stack is empty".format(tag_name)
-                steps.append({
-                    "step": len(steps) + 1,
-                    "state": "q_err",
-                    "input_remaining": rem,
-                    "stack": list(reversed(stack)),
-                    "action": "READ '</{}>': ERROR stack empty -- no open tag to match".format(tag_name),
-                    "arrow": "q0 -> q_err (no match on stack)",
-                    "valid": False,
-                    "tag_event": "error",
-                    "tag_name": tag_name,
-                })
-                break
-
-            top = stack[-1]
-            if top.lower() == tag_name:
-                stack.pop()
-                if is_xml and stack == ['Z0']:
-                    # Root tag closed and revealed Z0: transition into completed post-root state q2
-                    state = 'q2'
+                if len(stack) <= 1:
+                    error = "Closing tag </{}>: stack is empty".format(tag_name)
                     steps.append({
                         "step": len(steps) + 1,
-                        "state": state,
+                        "state": "q_err",
                         "input_remaining": rem,
                         "stack": list(reversed(stack)),
-                        "action": "READ '</{}>' -> MATCH root '{}' -> POP (reveals Z0, state q0 -> q2)".format(tag_name, top),
-                        "arrow": "δ(q0, </{}>, {}) = (q2, ε)".format(tag_name, top),
-                        "valid": None,
-                        "tag_event": "close_match",
+                        "action": "READ '</{}>': ERROR stack empty -- no open tag to match".format(tag_name),
+                        "arrow": "q0 -> q_err (no match on stack)",
+                        "valid": False,
+                        "tag_event": "error",
                         "tag_name": tag_name,
                     })
-                else:
+                    break
+
+                top = stack[-1]
+                if top.lower() == tag_name:
+                    stack.pop()
                     steps.append({
                         "step": len(steps) + 1,
                         "state": state,
@@ -397,47 +612,30 @@ def run_html(html_input: str, mode: str = 'html'):
                         "tag_event": "close_match",
                         "tag_name": tag_name,
                     })
-            else:
-                error = "Mismatch: expected </{}> but got </{}>".format(top, tag_name)
-                steps.append({
-                    "step": len(steps) + 1,
-                    "state": "q_err",
-                    "input_remaining": rem,
-                    "stack": list(reversed(stack)),
-                    "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
-                    "arrow": "q0 -> q_err (mismatch)",
-                    "valid": False,
-                    "tag_event": "error",
-                    "tag_name": tag_name,
-                })
-                break
-
-        elif token.startswith('<'):
-            # -- Opening or self-closing tag --
-            m = re.match(r'<([^\s/>]+)', token)
-            tag_name = m.group(1).lower() if m else token
-            is_self_closing = token.rstrip().endswith('/>')
-            top = stack[-1]
-
-            if is_self_closing or (not is_xml and tag_name in VOID_TAGS):
-                # Void: stack unchanged (HTML void tags like <br> or self-closing <tag/>)
-                kind = 'self-closing' if is_self_closing else 'void tag'
-                rule_tag = tag_name if (not is_self_closing and tag_name == 'br') else (token[:15] if is_self_closing else tag_name)
-                if is_xml and stack == ['Z0']:
-                    # Self-closing root tag (e.g. <root/>) immediately completes the root element
-                    state = 'q2'
+                else:
+                    error = "Mismatch: expected </{}> but got </{}>".format(top, tag_name)
                     steps.append({
                         "step": len(steps) + 1,
-                        "state": state,
+                        "state": "q_err",
                         "input_remaining": rem,
                         "stack": list(reversed(stack)),
-                        "action": "READ '{}' -> self-closing root (reveals Z0, state q0 -> q2)".format(token[:30]),
-                        "arrow": "δ(q0, <{}>, Z0) = (q2, Z0)".format(rule_tag),
-                        "valid": None,
-                        "tag_event": "void",
+                        "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
+                        "arrow": "q0 -> q_err (mismatch)",
+                        "valid": False,
+                        "tag_event": "error",
                         "tag_name": tag_name,
                     })
-                else:
+                    break
+
+            elif token.startswith('<'):
+                m = re.match(r'<([^\s/>]+)', token)
+                tag_name = m.group(1).lower() if m else token
+                is_self_closing = token.rstrip().endswith('/>')
+                top = stack[-1]
+
+                if is_self_closing or tag_name in VOID_TAGS:
+                    kind = 'self-closing' if is_self_closing else 'void tag'
+                    rule_tag = tag_name if (not is_self_closing and tag_name == 'br') else (token[:15] if is_self_closing else tag_name)
                     steps.append({
                         "step": len(steps) + 1,
                         "state": state,
@@ -449,70 +647,52 @@ def run_html(html_input: str, mode: str = 'html'):
                         "tag_event": "void",
                         "tag_name": tag_name,
                     })
-            else:
-                # Auto-close sibling (HTML mode only):
-                if not is_xml and len(stack) > 1 and stack[-1].lower() == tag_name and tag_name in AUTO_CLOSE_TAGS:
-                    stack.pop()
-                    cur_rem = token + (' ' + rem if rem != '(empty)' else '')
+                else:
+                    # Auto-close sibling (HTML mode only):
+                    if len(stack) > 1 and stack[-1].lower() == tag_name and tag_name in AUTO_CLOSE_TAGS:
+                        stack.pop()
+                        cur_rem = token + (' ' + rem if rem != '(empty)' else '')
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": cur_rem,
+                            "stack": list(reversed(stack)),
+                            "action": "AUTO-CLOSE previous <{}> (sibling opened) -> POP".format(tag_name),
+                            "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(tag_name),
+                            "valid": None,
+                            "tag_event": "auto_close",
+                            "tag_name": tag_name,
+                        })
+
+                    prev_top = stack[-1]
+                    stack.append(tag_name)
                     steps.append({
                         "step": len(steps) + 1,
                         "state": state,
-                        "input_remaining": cur_rem,
+                        "input_remaining": rem,
                         "stack": list(reversed(stack)),
-                        "action": "AUTO-CLOSE previous <{}> (sibling opened) -> POP".format(tag_name),
-                        "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(tag_name),
+                        "action": "READ '{}' -> PUSH '{}'".format(token[:30], tag_name),
+                        "arrow": "δ(q0, <{}>, {}) = (q0, {} {})".format(tag_name, prev_top, tag_name, prev_top),
                         "valid": None,
-                        "tag_event": "auto_close",
+                        "tag_event": "open",
                         "tag_name": tag_name,
                     })
-
-                prev_top = stack[-1]
-                stack.append(tag_name)
+            else:
+                top = stack[-1]
+                short = token[:24] + ('...' if len(token) > 24 else '')
                 steps.append({
                     "step": len(steps) + 1,
                     "state": state,
                     "input_remaining": rem,
                     "stack": list(reversed(stack)),
-                    "action": "READ '{}' -> PUSH '{}'".format(token[:30], tag_name),
-                    "arrow": "δ(q0, <{}>, {}) = (q0, {} {})".format(tag_name, prev_top, tag_name, prev_top),
+                    "action": "READ text '{}' -> stack unchanged".format(short),
+                    "arrow": "δ(q0, text, {}) = (q0, {})".format(top, top),
                     "valid": None,
-                    "tag_event": "open",
-                    "tag_name": tag_name,
-                })
-        else:
-            # -- Text content --
-            top = stack[-1]
-            short = token[:24] + ('...' if len(token) > 24 else '')
-            if is_xml and top == 'Z0':
-                error = "Raw root text '{}' outside element in XML".format(short)
-                steps.append({
-                    "step": len(steps) + 1,
-                    "state": "q_err",
-                    "input_remaining": rem,
-                    "stack": list(reversed(stack)),
-                    "action": "READ text '{}': ERROR root text not allowed outside open tag (stack top is Z0) -> REJECT".format(short),
-                    "arrow": "δ(q0, text, Z0) = (q_err, Z0)",
-                    "valid": False,
-                    "tag_event": "error",
+                    "tag_event": "text",
                     "tag_name": None,
                 })
-                break
 
-            steps.append({
-                "step": len(steps) + 1,
-                "state": state,
-                "input_remaining": rem,
-                "stack": list(reversed(stack)),
-                "action": "READ text '{}' -> stack unchanged".format(short),
-                "arrow": "δ(q0, text, {}) = (q0, {})".format(top, top),
-                "valid": None,
-                "tag_event": "text",
-                "tag_name": None,
-            })
-
-    if not error:
-        # Auto-close any remaining auto-close tags before final check (HTML mode only)
-        if not is_xml:
+        if not error:
             while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS:
                 popped = stack.pop()
                 steps.append({
@@ -527,49 +707,32 @@ def run_html(html_input: str, mode: str = 'html'):
                     "tag_name": popped,
                 })
 
-        if stack == ['Z0']:
-            if is_xml and state != 'q2':
-                # In XML, stack is Z0 but root tag was never closed/completed (e.g. empty or non-tag input)
-                steps.append({
-                    "step": len(steps) + 1,
-                    "state": "q_err",
-                    "input_remaining": "(empty)",
-                    "stack": ['Z0'],
-                    "action": "Input exhausted -- no root element found in XML -> REJECT",
-                    "arrow": "q0 -> q_err (no root element)",
-                    "valid": False,
-                    "tag_event": "error",
-                    "tag_name": None,
-                })
-            else:
-                prev_state = state
+            if stack == ['Z0']:
                 state = 'q_f'
-                arrow_str = "δ({}, ε, Z0) = (qf, Z0)".format(prev_state)
-                action_str = "Input exhausted in state {}, stack = [Z0] -> ACCEPT (well-formed XML single root)".format(prev_state) if is_xml else "Input exhausted, stack = [Z0] -> ACCEPT (well-formed)"
                 steps.append({
                     "step": len(steps) + 1,
                     "state": state,
                     "input_remaining": "(empty)",
                     "stack": ['Z0'],
-                    "action": action_str,
-                    "arrow": arrow_str,
+                    "action": "Input exhausted, stack = [Z0] -> ACCEPT (well-formed)",
+                    "arrow": "δ(q0, ε, Z0) = (qf, Z0)",
                     "valid": True,
                     "tag_event": "accept",
                     "tag_name": None,
                 })
-        else:
-            unclosed = [s for s in stack if s != 'Z0']
-            steps.append({
-                "step": len(steps) + 1,
-                "state": "q_err",
-                "input_remaining": "(empty)",
-                "stack": list(reversed(stack)),
-                "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
-                "arrow": "q0 -> q_err (unclosed tags)",
-                "valid": False,
-                "tag_event": "error",
-                "tag_name": unclosed[0] if unclosed else None,
-            })
+            else:
+                unclosed = [s for s in stack if s != 'Z0']
+                steps.append({
+                    "step": len(steps) + 1,
+                    "state": "q_err",
+                    "input_remaining": "(empty)",
+                    "stack": list(reversed(stack)),
+                    "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
+                    "arrow": "q0 -> q_err (unclosed tags)",
+                    "valid": False,
+                    "tag_event": "error",
+                    "tag_name": unclosed[0] if unclosed else None,
+                })
 
     return steps
 
