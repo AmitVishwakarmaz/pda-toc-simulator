@@ -25,18 +25,21 @@ function setHtmlMode(mode) {
   document.querySelectorAll('.mode-btn').forEach(function (b) {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
-  // Update title and description
+  // Update title, description, and hint
   var title = document.getElementById('html-mode-title');
   var desc  = document.getElementById('html-mode-desc');
+  var hint  = document.getElementById('html-mode-hint');
   var lbl   = document.getElementById('html-input-label');
   if (htmlMode === 'xml') {
-    if (title) title.textContent = 'XML Tag Validation (3-State DPDA)';
+    if (title) title.textContent = 'XML Tag Validation';
     if (lbl)   lbl.textContent   = 'XML snippet';
-    if (desc)  desc.innerHTML    = '<strong>XML 3-State DPDA (<code>q0</code>, <code>q1</code>, <code>q_f</code>)</strong>: <code>&delta;(q0, &lt;T&gt;, Z0) = (q1, T Z0)</code>; <code>&delta;(q1, &lt;T2&gt;, T1) = (q1, T2 T1)</code>; <code>&delta;(q1, text, T) = (q1, T)</code> (<code>T &ne; Z0</code>); <code>&delta;(q1, &lt;/T&gt;, T) = (q1, &epsilon;)</code>; <code>&delta;(q1, &epsilon;, Z0) = (qf, Z0)</code>. Raw root text and multiple roots are strictly rejected.';
+    if (desc)  desc.innerHTML    = 'Opening tags push onto the stack; matching closing tags pop. <strong>XML mode</strong> uses a 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>) to enforce a single root element and strict nesting.';
+    if (hint)  hint.innerHTML    = 'Example: <code>&lt;catalog&gt;&lt;book&gt;XML Guide&lt;/book&gt;&lt;/catalog&gt;</code>';
   } else {
-    if (title) title.textContent = 'HTML Tag Nesting Validation';
+    if (title) title.textContent = 'HTML Tag Validation';
     if (lbl)   lbl.textContent   = 'HTML snippet';
-    if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.';
+    if (desc)  desc.innerHTML    = 'Opening tags push onto the stack; matching closing tags pop. <strong>HTML mode</strong> supports void tags (<code>br</code>, <code>img</code>&hellip;) and auto-closes optional tags (<code>p</code>, <code>li</code>&hellip;).';
+    if (hint)  hint.innerHTML    = 'Example: <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>';
   }
   // Clear any previous result
   var simArea = document.getElementById('sim-html');

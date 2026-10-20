@@ -234,26 +234,14 @@
     <section class="topic-panel" id="panel-html" role="tabpanel" aria-labelledby="tab-html">
       <div class="panel-desc">
         <div class="html-mode-header">
-          <h2 id="html-mode-title">XML Tag Validation (3-State DPDA)</h2>
+          <h2 id="html-mode-title">XML Tag Validation</h2>
           <div class="html-mode-toggle" id="html-mode-toggle">
             <button class="mode-btn active" id="mode-btn-xml" data-mode="xml">XML</button>
             <button class="mode-btn" id="mode-btn-html" data-mode="html">HTML</button>
           </div>
         </div>
-        <p id="html-mode-desc"><strong>XML 3-State DPDA (<code>q0</code>, <code>q1</code>, <code>q_f</code>)</strong>:
-          <code>&delta;(q0, &lt;T&gt;, Z0) = (q1, T Z0)</code> (root tag opens from <code>q0</code>);
-          <code>&delta;(q1, &lt;T2&gt;, T1) = (q1, T2 T1)</code> (nested tags push only over active tags);
-          <code>&delta;(q1, text, T) = (q1, T)</code> (text allowed only inside tags, <code>T &ne; Z0</code>);
-          <code>&delta;(q1, &lt;/T&gt;, T) = (q1, &epsilon;)</code> (matching close pops);
-          <code>&delta;(q1, &epsilon;, Z0) = (qf, Z0)</code> (uncover <code>Z0</code> &rarr; final state <code>q_f</code>).
-          Multiple roots, raw root text, and tag mismatches halt and reject automatically.
-        </p>
-        <p class="example-hint" id="html-mode-hint">
-          <strong>XML:</strong>
-          <code>&lt;catalog&gt;&lt;book&gt;&lt;title&gt;XML Guide&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;</code>
-          &nbsp;&mdash;&nbsp;
-          <strong>HTML:</strong> <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>
-        </p>
+        <p id="html-mode-desc">Opening tags push onto the stack; matching closing tags pop. <strong>XML mode</strong> uses a 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>) to enforce a single root element and strict nesting.</p>
+        <p class="example-hint" id="html-mode-hint">Example: <code>&lt;catalog&gt;&lt;book&gt;XML Guide&lt;/book&gt;&lt;/catalog&gt;</code></p>
       </div>
       <div class="input-row">
         <div class="input-group full">
