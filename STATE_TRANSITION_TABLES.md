@@ -85,7 +85,10 @@ Models recursive function calls using an explicit PDA stack. Frames represent ei
 
 # Topic C: HTML & XML Balanced Tag Validation
 
-Validates whether open and close markup tags form properly nested language structures. HTML allows void tags (e.g. `<br>`) and implicit auto-closing tags (e.g. `<p>`), while XML enforces strict balanced closing without void or auto-close exceptions. Furthermore, in XML parsing, text input is only valid when the stack top is an open element tag ($T$), never when the stack top is the initial symbol ($Z_0$), thereby rejecting raw root text.
+Validates whether open and close markup tags form properly nested language structures. HTML allows void tags (e.g. `<br>`), implicit auto-closing tags (e.g. `<p>`), and multiple sibling root elements. In contrast, XML enforces:
+1. Strict balanced closing without void or auto-close exceptions.
+2. Text input is only valid when the stack top is an open element tag ($T$), rejecting raw root text when stack top is $Z_0$.
+3. **Single-root element rule**: After the root tag closes and reveals $Z_0$ on the stack, the PDA transitions into a completed/post-root state $q_2$. In $q_2$, only trailing whitespace or the end marker $\$$ is allowed; reading any new opening tag (e.g. $\langle\text{secondRoot}\rangle$) halts and rejects immediately to $q_{\text{err}}$.
 
 ---
 
@@ -109,12 +112,16 @@ Validates whether open and close markup tags form properly nested language struc
 
 | Current State ($q$) | Input Symbol ($a$) | Stack Top ($X$) | Next State ($p$) | Stack Action ($\gamma$) | Formal Transition $\delta(q, a, X)$ | Meaning / Operation |
 | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **$q_0$** | $\langle T \rangle$ | $Z_0$ | $q_0$ | $T\ Z_0$ | $\delta(q_0, \langle T \rangle, Z_0) = (q_0, T\ Z_0)$ | Push tag $T$ onto bottom marker $Z_0$ |
-| **$q_0$** | $\langle T_2 \rangle$ | $T_1$ | $q_0$ | $T_2\ T_1$ | $\delta(q_0, \langle T_2 \rangle, T_1) = (q_0, T_2\ T_1)$ | Push tag $T_2$ onto stack above $T_1$ |
+| **$q_0$** | $\langle T \rangle$ | $Z_0$ | $q_0$ | $T\ Z_0$ | $\delta(q_0, \langle T \rangle, Z_0) = (q_0, T\ Z_0)$ | Push root tag $T$ onto bottom marker $Z_0$ |
+| **$q_0$** | $\langle T_2 \rangle$ | $T_1$ | $q_0$ | $T_2\ T_1$ | $\delta(q_0, \langle T_2 \rangle, T_1) = (q_0, T_2\ T_1)$ | Push child tag $T_2$ onto stack above $T_1$ |
 | **$q_0$** | text | $T$ | $q_0$ | $T$ | $\delta(q_0, \text{text}, T) = (q_0, T)$ | Text inside tag: stack unchanged (valid) |
 | **$q_0$** | text | $Z_0$ | $q_{\text{err}}$ | $Z_0$ | $\delta(q_0, \text{text}, Z_0) = (q_{\text{err}}, Z_0)$ | Raw root text: ERROR / REJECT (text only valid when stack top is open tag $T$) |
-| **$q_0$** | $\langle /T \rangle$ | $T$ | $q_0$ | $\varepsilon$ | $\delta(q_0, \langle /T \rangle, T) = (q_0, \varepsilon)$ | Matching closing tag: POP $T$ |
-| **$q_0$** | $\varepsilon$ | $Z_0$ | $q_f$ | $Z_0$ | $\delta(q_0, \varepsilon, Z_0) = (q_f, Z_0)$ | End of input with empty stack: ACCEPT |
+| **$q_0$** | $\langle /T_2 \rangle$ | $T_2$ <br> *(stack $> 1$)* | $q_0$ | $\varepsilon$ | $\delta(q_0, \langle /T_2 \rangle, T_2) = (q_0, \varepsilon)$ | Matching inner closing tag: POP $T_2$ (stack still holds open tags) |
+| **$q_0$** | $\langle /T_{\text{root}} \rangle$ | $T_{\text{root}}$ <br> *(reveals $Z_0$)* | $q_2$ | $\varepsilon$ | $\delta(q_0, \langle /T_{\text{root}} \rangle, T_{\text{root}}) = (q_2, \varepsilon)$ | **Root Element Closes**: POP root tag, reveals $Z_0$ $\to$ transition to post-root state $q_2$ |
+| **$q_0$** | $\langle T/\rangle$ | $Z_0$ | $q_2$ | $Z_0$ | $\delta(q_0, \langle T/\rangle, Z_0) = (q_2, Z_0)$ | **Self-closing Root Tag**: Completes root element immediately $\to$ transition to $q_2$ |
+| **$q_2$** | $\$$ / $\varepsilon$ | $Z_0$ | $q_f$ | $Z_0$ | $\delta(q_2, \varepsilon, Z_0) = (q_f, Z_0)$ | **End of Input in $q_2$**: Stack has only $Z_0$ $\to$ ACCEPT (valid single-root XML) |
+| **$q_2$** | $\langle\text{secondRoot}\rangle$ | $Z_0$ | $q_{\text{err}}$ | $Z_0$ | $\delta(q_2, \langle\text{secondRoot}\rangle, Z_0) = (q_{\text{err}}, Z_0)$ | **Multiple Roots Violation**: New opening tag in $q_2$ $\to$ ERROR / REJECT |
+| **$q_2$** | text | $Z_0$ | $q_{\text{err}}$ | $Z_0$ | $\delta(q_2, \text{text}, Z_0) = (q_{\text{err}}, Z_0)$ | Trailing text after root closed in $q_2$ $\to$ ERROR / REJECT |
 
 ---
 
@@ -139,12 +146,16 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> q0
-    q0 --> q0 : <T>, Z0 / T Z0
-    q0 --> q0 : <T2>, T1 / T2 T1
+    q0 --> q0 : <T>, Z0 / T Z0 (open root)
+    q0 --> q0 : <T2>, T1 / T2 T1 (open child)
     q0 --> q0 : text, T / T
     q0 --> q_err : text, Z0 / Z0
-    q0 --> q0 : </T>, T / ε
-    q0 --> qf : ε, Z0 / Z0
+    q0 --> q0 : </T2>, T2 / ε (inner close)
+    q0 --> q2 : </T_root>, T_root / ε (root close reveals Z0)
+    q0 --> q2 : <T/>, Z0 / Z0 (self-closing root)
+    q2 --> qf : $, Z0 / Z0 (accept)
+    q2 --> q_err : <secondRoot>, Z0 / Z0 (reject multi-root)
+    q2 --> q_err : text, Z0 / Z0 (reject trailing text)
 ```
 
 ---
