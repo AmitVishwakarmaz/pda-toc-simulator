@@ -262,13 +262,13 @@
                 data-input="&lt;root1&gt;&lt;/root1&gt;&lt;root2&gt;&lt;/root2&gt;"
                 title="Fails in XML (multiple roots undefined in qf)">&lt;root1/&gt;&lt;root2/&gt; (XML multi-root)</button>
               <button type="button" class="chip-btn"
-                data-mode="xml"
-                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;"
-                title="Fails in XML (unclosed p), passes in HTML (auto-close p)">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt; (XML unclosed tag)</button>
+                data-mode="html"
+                data-input="&lt;p&gt;text&lt;br&gt;&lt;p&gt;next"
+                title="Passes in HTML (DPDA: sibling self-loop on q0, $ pops p into q1 -> qf)">&lt;p&gt;text&lt;br&gt;&lt;p&gt;next (HTML DPDA q0&rarr;q1&rarr;qf)</button>
               <button type="button" class="chip-btn"
                 data-mode="html"
-                data-input="&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;"
-                title="Passes in HTML (void & auto-close)">&lt;p&gt;text&lt;br&gt;&lt;p&gt; (HTML void/auto)</button>
+                data-input="&lt;p&gt;text&lt;/p&gt;"
+                title="Passes in HTML (direct accept q0 -> qf on $ with empty stack)">&lt;p&gt;text&lt;/p&gt; (HTML direct q0&rarr;qf)</button>
             </div>
           </div>
           <textarea id="html-input" rows="3"

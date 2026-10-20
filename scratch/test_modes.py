@@ -9,12 +9,12 @@ def test(name, text, mode, expected_valid):
     status = 'PASS' if actual_valid == expected_valid else 'FAIL'
     print(f"[{status}] {name} (mode={mode}) -> valid={actual_valid} (last action: {last['action'][:55]})")
 
-test("User example in XML", "<div> <p> <b> text </b> </div>", "xml", False)
-test("User example in HTML", "<div> <p> <b> text </b> </div>", "html", True)
+test("User example unclosed p in XML", "<div> <p> <b> text </b> </div>", "xml", False)
+test("HTML unclosed p before close div rejected in DPDA", "<div> <p> <b> text </b> </div>", "html", False)
 test("Properly closed in XML", "<div> <p> <b> text </b> </p> </div>", "xml", True)
 test("Void tag without slash in XML", "<root><br><item>text</item></root>", "xml", False)
 test("Self-closing slash in XML", "<root><br/><item>text</item></root>", "xml", True)
-test("HTML void and auto-close", "<div><p>text<br><p>next</div>", "html", True)
+test("HTML DPDA void and sibling self-loop with cleanup at $", "<p>text<br><p>next", "html", True)
 test("Raw root text before tags in XML", "raw text <catalog><book>Guide</book></catalog>", "xml", False)
 test("Raw root text after tags in XML", "<catalog><book>Guide</book></catalog> trailing text", "xml", False)
 test("Only raw text in XML", "just raw text without elements", "xml", False)

@@ -36,10 +36,10 @@ function setHtmlMode(mode) {
     if (desc)  desc.innerHTML    = 'Opening tags push onto the stack; matching closing tags pop. <strong>XML mode</strong> uses a 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>) to enforce a single root element and strict nesting.';
     if (hint)  hint.innerHTML    = 'Example: <code>&lt;catalog&gt;&lt;book&gt;XML Guide&lt;/book&gt;&lt;/catalog&gt;</code>';
   } else {
-    if (title) title.textContent = 'HTML Tag Validation';
+    if (title) title.textContent = 'HTML Tag Validation (DPDA)';
     if (lbl)   lbl.textContent   = 'HTML snippet';
-    if (desc)  desc.innerHTML    = 'Opening tags push onto the stack; matching closing tags pop. <strong>HTML mode</strong> supports void tags (<code>br</code>, <code>img</code>&hellip;) and auto-closes optional tags (<code>p</code>, <code>li</code>&hellip;).';
-    if (hint)  hint.innerHTML    = 'Example: <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>';
+    if (desc)  desc.innerHTML    = 'Deterministic 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>): self-loop on sibling <code>&lt;p&gt;</code>, void tags (<code>&lt;br&gt;</code>), and end-marker <code>$</code> popping unclosed <code>p</code> to <code>q1</code> before accepting in <code>q_f</code>.';
+    if (hint)  hint.innerHTML    = 'Example: <code>&lt;p&gt;text&lt;br&gt;&lt;p&gt;next</code>';
   }
   // Clear any previous result
   var simArea = document.getElementById('sim-html');
@@ -799,7 +799,17 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
         type: 'void', tag: tagName, depth: depthTracker,
         status: isCurrent ? 'active' : 'void'
       });
-    } else if (ev === 'auto_close') {
+    } else if (ev === 'sibling_open') {
+      if (openStack.length > 0) {
+        var prevIdx = openStack.pop();
+        if (events[prevIdx]) events[prevIdx].status = 'matched';
+      }
+      events.push({
+        type: 'open', tag: tagName, depth: depthTracker,
+        status: isCurrent ? 'active' : 'pending'
+      });
+      openStack.push(events.length - 1);
+    } else if (ev === 'auto_close' || ev === 'cleanup_pop') {
       if (openStack.length > 0) {
         var acIdx = openStack.pop();
         if (events[acIdx]) events[acIdx].status = 'matched';
@@ -901,7 +911,7 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
       line.innerHTML += '<span class="ht-bracket">&lt;/</span>' +
         '<span class="ht-tagname ht-tagname-auto">' + (ev.tag || '') + '</span>' +
         '<span class="ht-bracket">&gt;</span>' +
-        '<span class="ht-auto-badge">auto</span>';
+        '<span class="ht-auto-badge">popped at $ (q1)</span>';
     }
 
     wrap.appendChild(line);
@@ -1065,7 +1075,7 @@ function resetTopic(topic) {
     document.getElementById('hanoi-aux').value  = 'B';
   }
   if (topic === 'html') {
-    document.getElementById('html-input').value = '<div> <p> <b> text </b> </p> </div>';
+    document.getElementById('html-input').value = '<p>text<br><p>next';
   }
   if (topic === 'nlp') {
     document.getElementById('nlp-input').value = 'the dog chased the cat';

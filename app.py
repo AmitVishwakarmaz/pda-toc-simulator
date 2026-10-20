@@ -570,22 +570,6 @@ def run_html(html_input: str, mode: str = 'xml'):
             if token.startswith('</'):
                 tag_name = re.sub(r'[<>/\s]', '', token).lower()
 
-                # Pop any auto-close tags sitting on top (e.g. <p> before </div>)
-                while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS and stack[-1].lower() != tag_name:
-                    popped = stack.pop()
-                    cur_rem = token + ' ' + rem
-                    steps.append({
-                        "step": len(steps) + 1,
-                        "state": state,
-                        "input_remaining": cur_rem,
-                        "stack": list(reversed(stack)),
-                        "action": "AUTO-CLOSE <{}> before </{}> -> POP".format(popped, tag_name),
-                        "arrow": "δ(q0, </{}>, {}) = (q0, ε)".format(tag_name, popped),
-                        "valid": None,
-                        "tag_event": "auto_close",
-                        "tag_name": popped,
-                    })
-
                 if len(stack) <= 1:
                     error = "Closing tag </{}>: stack is empty".format(tag_name)
                     steps.append({
@@ -658,10 +642,10 @@ def run_html(html_input: str, mode: str = 'xml'):
                             "state": state,
                             "input_remaining": rem,
                             "stack": list(reversed(stack)),
-                            "action": "READ '{}' -> self-loop: auto-close sibling <{}> (stack: {} / {})".format(token[:30], tag_name, tag_name, tag_name),
+                            "action": "READ '{}' -> self-loop on q0 (stack: {} / {})".format(token[:30], tag_name, tag_name),
                             "arrow": "δ(q0, <{}>, {}) = (q0, {})".format(tag_name, tag_name, tag_name),
                             "valid": None,
-                            "tag_event": "open",
+                            "tag_event": "sibling_open",
                             "tag_name": tag_name,
                         })
                     else:
