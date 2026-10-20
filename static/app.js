@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (htmlMode === 'xml') {
         if (title) title.textContent = 'XML Tag Nesting Validation';
         if (lbl)   lbl.textContent   = 'XML snippet';
-        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: every open tag <em>must</em> have a matching close tag. No void tags, no implicit closes (e.g. <code>&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt;</code> will fail because <code>&lt;p&gt;</code> is unclosed).';
+        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: every open tag <em>must</em> have a matching close tag. No void tags, no implicit closes. Raw root text outside tags is rejected (text is only valid when stack top is an open element tag).';
       } else {
         if (title) title.textContent = 'HTML Tag Nesting Validation';
         if (lbl)   lbl.textContent   = 'HTML snippet';
@@ -768,10 +768,17 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
     } else if (ev === 'error') {
       isError = true;
       errorTagName = tagName;
-      events.push({
-        type: 'close_error', tag: tagName, depth: Math.max(0, depthTracker - 1),
-        status: 'error'
-      });
+      if (s.action && s.action.indexOf('READ text') !== -1) {
+        events.push({
+          type: 'text_error', tag: s.action, depth: depthTracker,
+          status: 'error'
+        });
+      } else {
+        events.push({
+          type: 'close_error', tag: tagName, depth: Math.max(0, depthTracker - 1),
+          status: 'error'
+        });
+      }
     } else if (ev === 'void') {
       events.push({
         type: 'void', tag: tagName, depth: depthTracker,
@@ -853,6 +860,17 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
         '<span class="ht-bracket">&gt;</span>' +
         '<span class="ht-error-marker"> &#9888; mismatch</span>';
 
+    } else if (ev.type === 'text_error') {
+      var txtMatch = (ev.tag || '').match(/READ text '([^']+)'/);
+      var displayTxt = txtMatch ? txtMatch[1] : (ev.tag || '').slice(0, 24);
+      var sp = document.createElement('span');
+      sp.className = 'ht-text ht-tagname-error';
+      sp.textContent = '"' + displayTxt + '"';
+      line.appendChild(sp);
+      var em = document.createElement('span');
+      em.className = 'ht-error-marker';
+      em.innerHTML = ' &#9888; root text not allowed in XML';
+      line.appendChild(em);
     } else if (ev.type === 'void') {
       line.innerHTML += '<span class="ht-bracket">&lt;</span>' +
         '<span class="ht-tagname ht-tagname-void">' + (ev.tag || '') + '</span>' +
@@ -878,7 +896,8 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
   } else if (isError) {
     var ebadge = document.createElement('div');
     ebadge.className = 'html-status-badge error';
-    ebadge.textContent = '\u2717 ' + (errorTagName ? '</' + errorTagName + '> mismatch' : 'Tag error') + ' \u2014 REJECT';
+    var errLabel = errorTagName ? ('</' + errorTagName + '> mismatch') : (s && s.action && s.action.indexOf('READ text') !== -1 ? 'Root text rejected' : 'Validation error');
+    ebadge.textContent = '\u2717 ' + errLabel + ' \u2014 REJECT';
     wrap.appendChild(ebadge);
   }
 

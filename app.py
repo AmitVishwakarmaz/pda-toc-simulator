@@ -251,7 +251,9 @@ def run_html(html_input: str, mode: str = 'html'):
     Simulates PDA for nested HTML/XML tag validation.
     mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules).
     mode='xml':  strict -- every open tag must have a close tag;
-                 only <tag/> self-closing syntax avoids pushing to stack.
+                 only <tag/> self-closing syntax avoids pushing to stack;
+                 text is only valid when stack top is an open element tag (T),
+                 never when stack top is Z0 (rejects raw root text).
     """
     is_xml = (mode == 'xml')
     token_re = re.compile(r'(<\/[^>]+>|<[^/>][^>]*>|<[^>]*/\s*>|[^<]+)')
@@ -399,6 +401,21 @@ def run_html(html_input: str, mode: str = 'html'):
             # -- Text content --
             top = stack[-1]
             short = token[:24] + ('...' if len(token) > 24 else '')
+            if is_xml and top == 'Z0':
+                error = "Raw root text '{}' outside element in XML".format(short)
+                steps.append({
+                    "step": len(steps) + 1,
+                    "state": "q_err",
+                    "input_remaining": rem,
+                    "stack": list(reversed(stack)),
+                    "action": "READ text '{}': ERROR root text not allowed outside open tag (stack top is Z0) -> REJECT".format(short),
+                    "arrow": "δ(q0, text, Z0) = (q_err, Z0)",
+                    "valid": False,
+                    "tag_event": "error",
+                    "tag_name": None,
+                })
+                break
+
             steps.append({
                 "step": len(steps) + 1,
                 "state": state,
