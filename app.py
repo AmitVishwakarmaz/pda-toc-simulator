@@ -246,10 +246,9 @@ AUTO_CLOSE_TAGS = {
     'thead', 'tbody', 'tfoot', 'option', 'optgroup', 'caption',
 }
 
-def run_html(html_input: str, mode: str = 'html'):
+def run_html(html_input: str, mode: str = 'xml'):
     """
     Simulates PDA for nested HTML/XML tag validation.
-    mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules, start in q0).
     mode='xml':  strict 3-state DPDA (q0, q1, qf):
                  - δ(q0, <T>, Z0) = (q1, T Z0) [open root tag only from start state q0]
                  - δ(q1, <T2>, T1) = (q1, T2 T1) [nested open tags only over existing tag T1 != Z0]
@@ -257,6 +256,7 @@ def run_html(html_input: str, mode: str = 'html'):
                  - δ(q1, </T>, T) = (q1, ε) [pop matching closing tags]
                  - δ(q1, ε, Z0) = (qf, Z0) [move to final state qf upon uncovering Z0]
                  All other combinations undefined (rejects raw root text and multiple roots).
+    mode='html': uses VOID_TAGS and AUTO_CLOSE_TAGS (lenient HTML rules, start in q0).
     """
     is_xml = (mode == 'xml')
     token_re = re.compile(r'(<\/[^>]+>|<[^/>][^>]*>|<[^>]*/\s*>|[^<]+)')
@@ -462,7 +462,7 @@ def run_html(html_input: str, mode: str = 'html'):
                             "input_remaining": rem,
                             "stack": list(reversed(stack)),
                             "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
-                            "arrow": "q1 -> q_err (mismatch)",
+                            "arrow": "δ(q1, </{}>, {}) = undefined -> q_err".format(tag_name, top),
                             "valid": False,
                             "tag_event": "error",
                             "tag_name": tag_name,
@@ -526,7 +526,7 @@ def run_html(html_input: str, mode: str = 'html'):
                         "input_remaining": "(empty)",
                         "stack": ['Z0'],
                         "action": "Input exhausted, stack = [Z0] -> ACCEPT in final state qf (well-formed XML single root)",
-                        "arrow": "qf (accept)",
+                        "arrow": "δ(q1, ε, Z0) = (qf, Z0)",
                         "valid": True,
                         "tag_event": "accept",
                         "tag_name": None,
@@ -539,7 +539,7 @@ def run_html(html_input: str, mode: str = 'html'):
                     "input_remaining": "(empty)",
                     "stack": list(reversed(stack)),
                     "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
-                    "arrow": "q1 -> q_err (unclosed tags)",
+                    "arrow": "δ(q1, ε, {}) = undefined -> q_err".format(stack[-1]),
                     "valid": False,
                     "tag_event": "error",
                     "tag_name": unclosed[0] if unclosed else None,
@@ -551,7 +551,7 @@ def run_html(html_input: str, mode: str = 'html'):
                     "input_remaining": "(empty)",
                     "stack": ['Z0'],
                     "action": "Input exhausted -- no root element found in XML -> REJECT",
-                    "arrow": "q0 -> q_err (no root element)",
+                    "arrow": "δ(q0, ε, Z0) = undefined -> q_err",
                     "valid": False,
                     "tag_event": "error",
                     "tag_name": None,
@@ -917,11 +917,11 @@ def api_hanoi():
 
 @app.route('/api/html', methods=['POST'])
 def api_html():
-    data = request.get_json()
+    data = request.get_json() or {}
     html = data.get('html', '').strip()
-    mode = data.get('mode', 'html').strip().lower()
+    mode = data.get('mode', 'xml').strip().lower()
     if mode not in ('html', 'xml'):
-        mode = 'html'
+        mode = 'xml'
     if not html:
         return jsonify({"error": "HTML/XML input is empty"}), 400
     try:

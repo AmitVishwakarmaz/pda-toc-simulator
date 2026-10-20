@@ -234,49 +234,57 @@
     <section class="topic-panel" id="panel-html" role="tabpanel" aria-labelledby="tab-html">
       <div class="panel-desc">
         <div class="html-mode-header">
-          <h2 id="html-mode-title">HTML Tag Nesting Validation</h2>
+          <h2 id="html-mode-title">XML Tag Validation (3-State DPDA)</h2>
           <div class="html-mode-toggle" id="html-mode-toggle">
-            <button class="mode-btn active" id="mode-btn-html" data-mode="html">HTML</button>
-            <button class="mode-btn" id="mode-btn-xml" data-mode="xml">XML</button>
+            <button class="mode-btn active" id="mode-btn-xml" data-mode="xml">XML</button>
+            <button class="mode-btn" id="mode-btn-html" data-mode="html">HTML</button>
           </div>
         </div>
-        <p id="html-mode-desc">Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags
-          (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags
-          (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.</p>
+        <p id="html-mode-desc"><strong>XML 3-State DPDA (<code>q0</code>, <code>q1</code>, <code>q_f</code>)</strong>:
+          <code>&delta;(q0, &lt;T&gt;, Z0) = (q1, T Z0)</code> (root tag opens from <code>q0</code>);
+          <code>&delta;(q1, &lt;T2&gt;, T1) = (q1, T2 T1)</code> (nested tags push only over active tags);
+          <code>&delta;(q1, text, T) = (q1, T)</code> (text allowed only inside tags, <code>T &ne; Z0</code>);
+          <code>&delta;(q1, &lt;/T&gt;, T) = (q1, &epsilon;)</code> (matching close pops);
+          <code>&delta;(q1, &epsilon;, Z0) = (qf, Z0)</code> (uncover <code>Z0</code> &rarr; final state <code>q_f</code>).
+          Multiple roots, raw root text, and tag mismatches halt and reject automatically.
+        </p>
         <p class="example-hint" id="html-mode-hint">
-          <strong>HTML:</strong> <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>
-          &nbsp;&mdash;&nbsp;
           <strong>XML:</strong>
           <code>&lt;catalog&gt;&lt;book&gt;&lt;title&gt;XML Guide&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;</code>
+          &nbsp;&mdash;&nbsp;
+          <strong>HTML:</strong> <code>&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;</code>
         </p>
       </div>
       <div class="input-row">
         <div class="input-group full">
           <div class="label-with-presets">
-            <label for="html-input" id="html-input-label">HTML snippet</label>
+            <label for="html-input" id="html-input-label">XML snippet</label>
             <div class="preset-chips">
               <span class="preset-label">Presets:</span>
               <button type="button" class="chip-btn"
-                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;"
-                title="Fails in XML (unclosed p), passes in HTML (auto-close p)">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt;
-                (XML fail / HTML pass)</button>
+                data-mode="xml"
+                data-input="&lt;catalog&gt;&lt;book&gt;&lt;title&gt;XML Guide&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;"
+                title="Passes in XML (nested single root)">&lt;catalog&gt;&lt;book&gt;... (Valid XML)</button>
               <button type="button" class="chip-btn"
-                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/p&gt; &lt;/div&gt;"
-                title="Passes in both">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/p&gt;&lt;/div&gt;
-                (Valid)</button>
-              <button type="button" class="chip-btn"
-                data-input="&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;"
-                title="Passes in HTML">&lt;p&gt;text&lt;br&gt;&lt;p&gt; (HTML void/auto)</button>
-              <button type="button" class="chip-btn"
+                data-mode="xml"
                 data-input="raw root text &lt;catalog&gt;&lt;book&gt;Guide&lt;/book&gt;&lt;/catalog&gt;"
-                title="Fails in XML (raw root text rejected with stack top Z0), passes in HTML">raw root text (XML root error)</button>
+                title="Fails in XML (raw root text undefined in q0 with stack top Z0)">raw root text (XML root error)</button>
               <button type="button" class="chip-btn"
+                data-mode="xml"
                 data-input="&lt;root1&gt;&lt;/root1&gt;&lt;root2&gt;&lt;/root2&gt;"
-                title="Fails in XML (multiple roots rejected in qf), passes in HTML">&lt;root1/&gt;&lt;root2/&gt; (XML multi-root)</button>
+                title="Fails in XML (multiple roots undefined in qf)">&lt;root1/&gt;&lt;root2/&gt; (XML multi-root)</button>
+              <button type="button" class="chip-btn"
+                data-mode="xml"
+                data-input="&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;"
+                title="Fails in XML (unclosed p), passes in HTML (auto-close p)">&lt;div&gt;&lt;p&gt;&lt;b&gt;text&lt;/b&gt;&lt;/div&gt; (XML unclosed tag)</button>
+              <button type="button" class="chip-btn"
+                data-mode="html"
+                data-input="&lt;div&gt;&lt;p&gt;text&lt;br&gt;&lt;p&gt;next&lt;/div&gt;"
+                title="Passes in HTML (void & auto-close)">&lt;p&gt;text&lt;br&gt;&lt;p&gt; (HTML void/auto)</button>
             </div>
           </div>
           <textarea id="html-input" rows="3"
-            spellcheck="false">&lt;div&gt; &lt;p&gt; &lt;b&gt; text &lt;/b&gt; &lt;/div&gt;</textarea>
+            spellcheck="false">&lt;catalog&gt;&lt;book&gt;&lt;title&gt;XML Guide&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;</textarea>
         </div>
         <div class="btn-group-run">
           <button class="run-btn" id="html-run">Run Simulation</button>

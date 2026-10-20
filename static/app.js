@@ -10,15 +10,42 @@ const sim = {};
 TOPICS.forEach(t => { sim[t] = { steps: [], cursor: 0, timer: null }; });
 
 // HTML / XML mode toggle
-var htmlMode = 'html'; // 'html' | 'xml'
+var htmlMode = 'xml'; // 'xml' | 'html'
 
 // State machine node definitions per topic
 const STATE_DEFS = {
   arithmetic: { nodes: ['q0', 'q_op', 'q_f'],         final: ['q_f'],  error: []        },
   hanoi:      { nodes: ['q0', 'q1', 'q_f'],            final: ['q_f'],  error: []        },
-  html:       { nodes: ['q0', 'q_f', 'q_err'],         final: ['q_f'],  error: ['q_err'] },
+  html:       { nodes: ['q0', 'q1', 'q_f', 'q_err'],   final: ['q_f'],  error: ['q_err'] },
   nlp:        { nodes: ['q0', 'q1', 'q_f'],            final: ['q_f'],  error: []        },
 };
+
+function setHtmlMode(mode) {
+  htmlMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  // Update title and description
+  var title = document.getElementById('html-mode-title');
+  var desc  = document.getElementById('html-mode-desc');
+  var lbl   = document.getElementById('html-input-label');
+  if (htmlMode === 'xml') {
+    if (title) title.textContent = 'XML Tag Validation (3-State DPDA)';
+    if (lbl)   lbl.textContent   = 'XML snippet';
+    if (desc)  desc.innerHTML    = '<strong>XML 3-State DPDA (<code>q0</code>, <code>q1</code>, <code>q_f</code>)</strong>: <code>&delta;(q0, &lt;T&gt;, Z0) = (q1, T Z0)</code>; <code>&delta;(q1, &lt;T2&gt;, T1) = (q1, T2 T1)</code>; <code>&delta;(q1, text, T) = (q1, T)</code> (<code>T &ne; Z0</code>); <code>&delta;(q1, &lt;/T&gt;, T) = (q1, &epsilon;)</code>; <code>&delta;(q1, &epsilon;, Z0) = (qf, Z0)</code>. Raw root text and multiple roots are strictly rejected.';
+  } else {
+    if (title) title.textContent = 'HTML Tag Nesting Validation';
+    if (lbl)   lbl.textContent   = 'HTML snippet';
+    if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.';
+  }
+  // Clear any previous result
+  var simArea = document.getElementById('sim-html');
+  if (simArea) simArea.style.display = 'none';
+  var errBox  = document.getElementById('err-html');
+  if (errBox)  errBox.style.display  = 'none';
+  var treeWrap = document.getElementById('html-tree-wrap');
+  if (treeWrap) treeWrap.innerHTML = '<div class="html-tree-placeholder">Tag structure will appear here as simulation runs...</div>';
+}
 
 // ----------------------------------------------------------------
 // Boot: attach all event listeners after DOM is ready
@@ -73,36 +100,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // HTML / XML mode toggle buttons
   document.querySelectorAll('.mode-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      htmlMode = btn.dataset.mode;
-      document.querySelectorAll('.mode-btn').forEach(function (b) {
-        b.classList.toggle('active', b === btn);
-      });
-      // Update title and description
-      var title = document.getElementById('html-mode-title');
-      var desc  = document.getElementById('html-mode-desc');
-      var lbl   = document.getElementById('html-input-label');
-      if (htmlMode === 'xml') {
-        if (title) title.textContent = 'XML Tag Nesting Validation';
-        if (lbl)   lbl.textContent   = 'XML snippet';
-        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>XML mode</strong>: 3-state DPDA (<code>q0</code> &rarr; <code>q1</code> &rarr; <code>q_f</code>); root element opens from <code>q0</code>; nested tags only over existing tags; all tags must balance; multiple roots and raw root text are rejected.';
-      } else {
-        if (title) title.textContent = 'HTML Tag Nesting Validation';
-        if (lbl)   lbl.textContent   = 'HTML snippet';
-        if (desc)  desc.innerHTML    = 'Opening tags are pushed; closing tags pop on match. <strong>HTML mode</strong>: void tags (<code>br</code>, <code>img</code>, <code>hr</code>&hellip;) need no close tag, and optional-close tags (<code>p</code>, <code>li</code>&hellip;) auto-close implicitly.';
-      }
-      // Clear any previous result
-      var simArea = document.getElementById('sim-html');
-      if (simArea) simArea.style.display = 'none';
-      var errBox  = document.getElementById('err-html');
-      if (errBox)  errBox.style.display  = 'none';
-      var treeWrap = document.getElementById('html-tree-wrap');
-      if (treeWrap) treeWrap.innerHTML = '<div class="html-tree-placeholder">Tag structure will appear here as simulation runs...</div>';
+      setHtmlMode(btn.dataset.mode);
     });
   });
 
   // Preset chips
   document.querySelectorAll('.chip-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
+      if (btn.dataset.mode) {
+        setHtmlMode(btn.dataset.mode);
+      }
       var inp = document.getElementById('html-input');
       if (inp && btn.dataset.input) {
         inp.value = btn.dataset.input;
@@ -774,12 +781,12 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
     } else if (ev === 'error') {
       isError = true;
       errorTagName = tagName;
-      if (s.action && s.action.indexOf('READ text') !== -1) {
+      if (s.action && (s.action.indexOf('READ text') !== -1 || s.action.indexOf('Raw root text') !== -1)) {
         events.push({
           type: 'text_error', tag: s.action, depth: depthTracker,
           status: 'error'
         });
-      } else if (s.action && s.action.indexOf('multiple root elements') !== -1) {
+      } else if (s.action && (s.action.indexOf('multiple root') !== -1 || s.action.indexOf('multiple roots') !== -1)) {
         events.push({
           type: 'open_error', tag: tagName, depth: 0,
           status: 'error'
@@ -912,7 +919,7 @@ function renderHtmlTagTree(step, allSteps, stepIndex) {
   } else if (isError) {
     var ebadge = document.createElement('div');
     ebadge.className = 'html-status-badge error';
-    var errLabel = errorTagName ? (s && s.action && s.action.indexOf('multiple root elements') !== -1 ? ('<' + errorTagName + '> multiple roots') : ('</' + errorTagName + '> mismatch')) : (s && s.action && s.action.indexOf('READ text') !== -1 ? 'Root text rejected' : 'Validation error');
+    var errLabel = errorTagName ? (s && s.action && (s.action.indexOf('multiple root') !== -1 || s.action.indexOf('multiple roots') !== -1) ? ('<' + errorTagName + '> multiple roots') : ('</' + errorTagName + '> mismatch')) : (s && s.action && (s.action.indexOf('READ text') !== -1 || s.action.indexOf('Raw root text') !== -1) ? 'Root text rejected' : 'Validation error');
     ebadge.textContent = '\u2717 ' + errLabel + ' \u2014 REJECT';
     wrap.appendChild(ebadge);
   }
