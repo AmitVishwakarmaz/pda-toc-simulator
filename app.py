@@ -267,10 +267,11 @@ def run_html(html_input: str, mode: str = 'xml'):
     stack = ['Z0']
     state = 'q0'
 
+    init_rem = ' '.join(tokens) if is_xml else (' '.join(tokens) + (' $' if not (tokens and tokens[-1] == '$') else ''))
     steps.append({
         "step": 1,
         "state": state,
-        "input_remaining": ' '.join(tokens),
+        "input_remaining": init_rem,
         "stack": list(reversed(stack)),
         "action": "Initial configuration",
         "arrow": "-- (start)",
@@ -559,25 +560,27 @@ def run_html(html_input: str, mode: str = 'xml'):
 
     else:
         # ─────────────────────────────────────────────────────────
-        # HTML Mode: Lenient rules (void tags, auto-close tags, multi-root)
+        # HTML Mode: Deterministic DPDA (q0, q1, qf) with end-marker '$'
         # ─────────────────────────────────────────────────────────
-        for i, token in enumerate(tokens):
-            rem = ' '.join(tokens[i+1:]) if i+1 < len(tokens) else '(empty)'
+        clean_tokens = [t for t in tokens if t != '$']
+
+        for i, token in enumerate(clean_tokens):
+            rem = (' '.join(clean_tokens[i+1:]) + ' $').strip() if i+1 < len(clean_tokens) else '$'
 
             if token.startswith('</'):
                 tag_name = re.sub(r'[<>/\s]', '', token).lower()
 
-                # Pop any auto-close tags sitting on top
+                # Pop any auto-close tags sitting on top (e.g. <p> before </div>)
                 while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS and stack[-1].lower() != tag_name:
                     popped = stack.pop()
-                    cur_rem = token + (' ' + rem if rem != '(empty)' else '')
+                    cur_rem = token + ' ' + rem
                     steps.append({
                         "step": len(steps) + 1,
                         "state": state,
                         "input_remaining": cur_rem,
                         "stack": list(reversed(stack)),
-                        "action": "AUTO-CLOSE <{}> -> POP".format(popped),
-                        "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(popped),
+                        "action": "AUTO-CLOSE <{}> before </{}> -> POP".format(popped, tag_name),
+                        "arrow": "δ(q0, </{}>, {}) = (q0, ε)".format(tag_name, popped),
                         "valid": None,
                         "tag_event": "auto_close",
                         "tag_name": popped,
@@ -591,7 +594,7 @@ def run_html(html_input: str, mode: str = 'xml'):
                         "input_remaining": rem,
                         "stack": list(reversed(stack)),
                         "action": "READ '</{}>': ERROR stack empty -- no open tag to match".format(tag_name),
-                        "arrow": "q0 -> q_err (no match on stack)",
+                        "arrow": "δ(q0, </{}>, Z0) = undefined -> q_err".format(tag_name),
                         "valid": False,
                         "tag_event": "error",
                         "tag_name": tag_name,
@@ -620,7 +623,7 @@ def run_html(html_input: str, mode: str = 'xml'):
                         "input_remaining": rem,
                         "stack": list(reversed(stack)),
                         "action": "READ '</{}>': MISMATCH -- top is '{}' (expected </{}>) -> ERROR".format(tag_name, top, top),
-                        "arrow": "q0 -> q_err (mismatch)",
+                        "arrow": "δ(q0, </{}>, {}) = undefined -> q_err".format(tag_name, top),
                         "valid": False,
                         "tag_event": "error",
                         "tag_name": tag_name,
@@ -648,35 +651,33 @@ def run_html(html_input: str, mode: str = 'xml'):
                         "tag_name": tag_name,
                     })
                 else:
-                    # Auto-close sibling (HTML mode only):
+                    # Self-Loop on q0: Replace any ε-transitions on <p> with <p>, p / p
                     if len(stack) > 1 and stack[-1].lower() == tag_name and tag_name in AUTO_CLOSE_TAGS:
-                        stack.pop()
-                        cur_rem = token + (' ' + rem if rem != '(empty)' else '')
                         steps.append({
                             "step": len(steps) + 1,
                             "state": state,
-                            "input_remaining": cur_rem,
+                            "input_remaining": rem,
                             "stack": list(reversed(stack)),
-                            "action": "AUTO-CLOSE previous <{}> (sibling opened) -> POP".format(tag_name),
-                            "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(tag_name),
+                            "action": "READ '{}' -> self-loop: auto-close sibling <{}> (stack: {} / {})".format(token[:30], tag_name, tag_name, tag_name),
+                            "arrow": "δ(q0, <{}>, {}) = (q0, {})".format(tag_name, tag_name, tag_name),
                             "valid": None,
-                            "tag_event": "auto_close",
+                            "tag_event": "open",
                             "tag_name": tag_name,
                         })
-
-                    prev_top = stack[-1]
-                    stack.append(tag_name)
-                    steps.append({
-                        "step": len(steps) + 1,
-                        "state": state,
-                        "input_remaining": rem,
-                        "stack": list(reversed(stack)),
-                        "action": "READ '{}' -> PUSH '{}'".format(token[:30], tag_name),
-                        "arrow": "δ(q0, <{}>, {}) = (q0, {} {})".format(tag_name, prev_top, tag_name, prev_top),
-                        "valid": None,
-                        "tag_event": "open",
-                        "tag_name": tag_name,
-                    })
+                    else:
+                        prev_top = stack[-1]
+                        stack.append(tag_name)
+                        steps.append({
+                            "step": len(steps) + 1,
+                            "state": state,
+                            "input_remaining": rem,
+                            "stack": list(reversed(stack)),
+                            "action": "READ '{}' -> PUSH '{}'".format(token[:30], tag_name),
+                            "arrow": "δ(q0, <{}>, {}) = (q0, {} {})".format(tag_name, prev_top, tag_name, prev_top),
+                            "valid": None,
+                            "tag_event": "open",
+                            "tag_name": tag_name,
+                        })
             else:
                 top = stack[-1]
                 short = token[:24] + ('...' if len(token) > 24 else '')
@@ -692,34 +693,84 @@ def run_html(html_input: str, mode: str = 'xml'):
                     "tag_name": None,
                 })
 
+        # Process end-marker '$' for deterministic HTML DPDA
         if not error:
-            while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS:
+            top = stack[-1].lower() if len(stack) > 1 else 'Z0'
+
+            # Transition from q0 to q1: Add a transition triggered by the end-marker that pops the unclosed paragraph: $, p / ε
+            if len(stack) > 1 and top in AUTO_CLOSE_TAGS:
                 popped = stack.pop()
+                state = 'q1'
                 steps.append({
                     "step": len(steps) + 1,
                     "state": state,
                     "input_remaining": "(empty)",
                     "stack": list(reversed(stack)),
-                    "action": "AUTO-CLOSE <{}> at end of input -> POP".format(popped),
-                    "arrow": "δ(q0, ε, <{}>) = (q0, ε)".format(popped),
+                    "action": "READ '$' -> pop unclosed <{}> (q0 -> q1)".format(popped),
+                    "arrow": "δ(q0, $, {}) = (q1, ε)".format(popped),
                     "valid": None,
                     "tag_event": "auto_close",
                     "tag_name": popped,
                 })
 
-            if stack == ['Z0']:
+                # In cleanup state q1, pop any additional unclosed auto-close tags
+                while len(stack) > 1 and stack[-1].lower() in AUTO_CLOSE_TAGS:
+                    popped = stack.pop()
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": state,
+                        "input_remaining": "(empty)",
+                        "stack": list(reversed(stack)),
+                        "action": "In cleanup state q1: pop unclosed <{}>".format(popped),
+                        "arrow": "δ(q1, ε, {}) = (q1, ε)".format(popped),
+                        "valid": None,
+                        "tag_event": "auto_close",
+                        "tag_name": popped,
+                    })
+
+                # Transition from q1 to qf: In the new cleanup state q1, transition to the accepting final state qf without consuming more input once the stack is empty: ε, Z0 / Z0
+                if stack == ['Z0']:
+                    state = 'q_f'
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": state,
+                        "input_remaining": "(empty)",
+                        "stack": ['Z0'],
+                        "action": "Stack = [Z0] in cleanup state q1 -> ACCEPT in final state qf",
+                        "arrow": "δ(q1, ε, Z0) = (qf, Z0)",
+                        "valid": True,
+                        "tag_event": "accept",
+                        "tag_name": None,
+                    })
+                else:
+                    unclosed = [s for s in stack if s != 'Z0']
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "state": "q_err",
+                        "input_remaining": "(empty)",
+                        "stack": list(reversed(stack)),
+                        "action": "In state q1: unclosed tag(s) remain: {} -> REJECT".format(unclosed),
+                        "arrow": "δ(q1, ε, {}) = undefined -> q_err".format(stack[-1]),
+                        "valid": False,
+                        "tag_event": "error",
+                        "tag_name": unclosed[0] if unclosed else None,
+                    })
+
+            # Transition from q0 to qf: Add a direct accepting transition for when no tags remain unclosed at the end: $, Z0 / Z0
+            elif stack == ['Z0']:
                 state = 'q_f'
                 steps.append({
                     "step": len(steps) + 1,
                     "state": state,
                     "input_remaining": "(empty)",
                     "stack": ['Z0'],
-                    "action": "Input exhausted, stack = [Z0] -> ACCEPT (well-formed)",
-                    "arrow": "δ(q0, ε, Z0) = (qf, Z0)",
+                    "action": "READ '$', stack = [Z0] -> ACCEPT in final state qf (well-formed HTML)",
+                    "arrow": "δ(q0, $, Z0) = (qf, Z0)",
                     "valid": True,
                     "tag_event": "accept",
                     "tag_name": None,
                 })
+
             else:
                 unclosed = [s for s in stack if s != 'Z0']
                 steps.append({
@@ -727,8 +778,8 @@ def run_html(html_input: str, mode: str = 'xml'):
                     "state": "q_err",
                     "input_remaining": "(empty)",
                     "stack": list(reversed(stack)),
-                    "action": "Input exhausted -- unclosed tags remain: {} -> REJECT".format(unclosed),
-                    "arrow": "q0 -> q_err (unclosed tags)",
+                    "action": "READ '$': unclosed tag(s) remain: {} -> REJECT".format(unclosed),
+                    "arrow": "δ(q0, $, {}) = undefined -> q_err".format(stack[-1]),
                     "valid": False,
                     "tag_event": "error",
                     "tag_name": unclosed[0] if unclosed else None,

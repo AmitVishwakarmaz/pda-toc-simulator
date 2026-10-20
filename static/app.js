@@ -220,9 +220,6 @@ function buildStateDiagram(topic) {
   var container = document.getElementById('states-' + topic);
   container.innerHTML = '';
   var def = STATE_DEFS[topic];
-  if (topic === 'html' && htmlMode === 'xml') {
-    def = { nodes: ['q0', 'q1', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
-  }
 
   def.nodes.forEach(function (name, i) {
     var node = document.createElement('div');
@@ -254,9 +251,6 @@ function sanitiseId(name) {
 
 function highlightState(topic, stateName) {
   var def = STATE_DEFS[topic];
-  if (topic === 'html' && htmlMode === 'xml') {
-    def = { nodes: ['q0', 'q1', 'q_f', 'q_err'], final: ['q_f'], error: ['q_err'] };
-  }
 
   def.nodes.forEach(function (name) {
     var node = document.getElementById('state-node-' + topic + '-' + sanitiseId(name));
